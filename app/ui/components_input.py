@@ -172,7 +172,9 @@ def build_chip_input(
             dropdown_area.refresh()
             # update placeholder in chips area (minor: skip refresh for perf)
 
-        inp.on("update:modelValue", _on_value_change)
+        # NiceGUI 3.x listens on the Quasar/Vue kebab event name; the camelCase
+        # "update:modelValue" form never fires (fixed during integration).
+        inp.on("update:model-value", _on_value_change)
 
         # keydown: Enter, Backspace, Escape, ArrowDown, ArrowUp
         def _on_keydown(e):
@@ -204,7 +206,9 @@ def build_chip_input(
                 state["open"] = False
                 dropdown_area.refresh()
 
-        inp.on("keydown", _on_keydown)
+        # Explicitly request the `key` field so NiceGUI serialises it into e.args
+        # (a bare .on("keydown") would deliver an empty payload).
+        inp.on("keydown", _on_keydown, args=["key"])
 
         # ---- dropdown (absolutely positioned below chip box) ----
         @ui.refreshable
@@ -343,7 +347,7 @@ def build_paste_scratch(
             parsed["miss"] = miss
             footer_area.refresh()
 
-        ta.on("update:modelValue", _on_ta_change)
+        ta.on("update:model-value", _on_ta_change)
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +416,7 @@ def build_cuisine_lean(
             if full_key:
                 set_cuisine(full_key)
 
-        sel.on("update:modelValue", _on_select)
+        sel.on("update:model-value", _on_select)
 
         # slider row
         with ui.row().style("align-items:center; gap:10px; width:100%;"):
@@ -431,4 +435,4 @@ def build_cuisine_lean(
                 set_push(val)
                 push_label_el.set_text(_push_label(val))
 
-            slider.on("update:modelValue", _on_slider)
+            slider.on("update:model-value", _on_slider)
