@@ -13,6 +13,7 @@ from typing import Any, Callable
 from nicegui import ui
 
 from app.ui.common import group_color, title_case
+from app.models import Recipe
 from app.services.recipe_store import RecipeStore
 
 # Model explanations (mirrors prototype MODEL_BLURB)
@@ -26,6 +27,7 @@ MODEL_BLURB: dict[str, str] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _dot(group: str, size: int = 9) -> None:
     """Render a tiny colored circle for an ingredient group."""
     color = group_color(group)
@@ -38,6 +40,7 @@ def _dot(group: str, size: int = 9) -> None:
 # ---------------------------------------------------------------------------
 # 1. WHY PANEL
 # ---------------------------------------------------------------------------
+
 
 def build_why_panel(
     container,
@@ -60,7 +63,9 @@ def build_why_panel(
         shared_modes: list[dict] = data.get("shared_modes", [])
 
         # Header: color dot + "Why {Title}?"
-        with ui.row().style("display:flex;align-items:center;gap:7px;font-size:15px;color:var(--ink);"):
+        with ui.row().style(
+            "display:flex;align-items:center;gap:7px;font-size:15px;color:var(--ink);"
+        ):
             group = svc.group_of(name)
             _dot(group)
             ui.html(f"Why <b>{title_case(name)}</b>?")
@@ -114,6 +119,7 @@ def build_why_panel(
 # 2. COMPARE VIEW (2-up / 3-up fan grid)
 # ---------------------------------------------------------------------------
 
+
 def build_compare(
     container,
     svc,
@@ -150,6 +156,7 @@ def build_compare(
 
                     # Body: delegate to viz.render_list (lazy import)
                     from app.ui.viz import render_list  # noqa: PLC0415
+
                     col_container = ui.element("div")
                     render_list(
                         col_container,
@@ -165,11 +172,12 @@ def build_compare(
 # 3. RECIPE BOOK DRAWER
 # ---------------------------------------------------------------------------
 
+
 def build_recipe_drawer(
     svc,
     store: RecipeStore,
     get_state: Callable[[], dict],
-    on_load: Callable[[dict], None],
+    on_load: Callable[[Recipe], None],
     refresh_after_change: Callable[[], None],
 ) -> dict:
     """Build a slide-over drawer.
@@ -178,8 +186,8 @@ def build_recipe_drawer(
     """
 
     # ---- mutable state ----
-    _open: list[bool] = [False]          # wrapped in list for closure mutation
-    _collapsed: dict[str, bool] = {}      # group-key -> collapsed flag
+    _open: list[bool] = [False]  # wrapped in list for closure mutation
+    _collapsed: dict[str, bool] = {}  # group-key -> collapsed flag
     _form: dict[str, Any] = {
         "name": "",
         "group": "",
@@ -204,18 +212,19 @@ def build_recipe_drawer(
     def _drawer_content() -> None:
         state = get_state()
         in_play: list[str] = state.get("in_play", [])
-        model_key: str = state.get("model", "core")
         editing_id = state.get("editing_id", None)
 
         all_recipes = store.list()
         all_groups = store.groups()
-        editing_recipe = next((r for r in all_recipes if r.get("id") == editing_id), None)
+        editing_recipe = next((r for r in all_recipes if r.id == editing_id), None)
 
         # ---- Pre-fill form when editing changes ----
         if editing_recipe and not _form["name"]:
-            _form["name"] = editing_recipe.get("name", "")
-            _form["group"] = editing_recipe.get("group", all_groups[0] if all_groups else "")
-            _form["notes"] = editing_recipe.get("notes", "")
+            _form["name"] = editing_recipe.name
+            _form["group"] = editing_recipe.group or (
+                all_groups[0] if all_groups else ""
+            )
+            _form["notes"] = editing_recipe.notes
 
         # Resolved group
         resolved_group = (
@@ -239,7 +248,7 @@ def build_recipe_drawer(
         # ---- Edit banner ----
         if editing_recipe:
             ui.html(
-                f"&#9998; Tweaking <b>{editing_recipe['name']}</b> — "
+                f"&#9998; Tweaking <b>{editing_recipe.name}</b> — "
                 "change ingredients, then update or fork a new version."
             ).style(
                 "font-size:12.5px;line-height:1.4;color:var(--accent);"
@@ -282,7 +291,9 @@ def build_recipe_drawer(
                 "padding-bottom:6px;border-bottom:1px solid var(--line);"
             ):
                 # Name input
-                name_inp = ui.input(placeholder="recipe name…", value=_form["name"]).style(
+                name_inp = ui.input(
+                    placeholder="recipe name…", value=_form["name"]
+                ).style(
                     "border:1px solid var(--line);border-radius:8px;"
                     "background:var(--field);color:var(--ink);"
                     "padding:9px 11px;font-size:14px;outline:none;width:100%;"
@@ -300,14 +311,17 @@ def build_recipe_drawer(
                         active = (not _form["adding_group"]) and (resolved_group == g)
                         btn_style = (
                             "border:none;background:var(--accent);color:var(--accent-ink);"
-                            if active else
-                            "border:1px solid var(--line);background:var(--field);color:var(--ink-soft);"
+                            if active
+                            else "border:1px solid var(--line);background:var(--field);color:var(--ink-soft);"
                         )
+
                         def _make_group_click(grp: str):
                             def _click():
                                 _form.update({"group": grp, "adding_group": False})
                                 _drawer_content.refresh()
+
                             return _click
+
                         ui.button(g, on_click=_make_group_click(g)).style(
                             btn_style + "border-radius:20px;padding:5px 12px;"
                             "font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;"
@@ -316,12 +330,14 @@ def build_recipe_drawer(
                     # "+ New" chip
                     new_btn_style = (
                         "border:none;background:var(--accent);color:var(--accent-ink);"
-                        if _form["adding_group"] else
-                        "border:1px solid var(--line);background:var(--field);color:var(--ink-soft);"
+                        if _form["adding_group"]
+                        else "border:1px solid var(--line);background:var(--field);color:var(--ink-soft);"
                     )
+
                     def _toggle_new():
                         _form.update({"adding_group": not _form["adding_group"]})
                         _drawer_content.refresh()
+
                     ui.button("+ New", on_click=_toggle_new).style(
                         new_btn_style + "border-radius:20px;padding:5px 12px;"
                         "font-size:12.5px;font-weight:600;cursor:pointer;"
@@ -362,18 +378,25 @@ def build_recipe_drawer(
                     if not can_save:
                         return
                     current_state = get_state()
-                    payload: dict = {
-                        "name": _form["name"].strip(),
-                        "group": resolved_group,
-                        "items": list(current_state.get("in_play", [])),
-                        "model": current_state.get("model", "core"),
-                        "notes": _form["notes"].strip(),
-                    }
+                    payload = Recipe(
+                        name=_form["name"].strip(),
+                        group=resolved_group,
+                        items=list(current_state.get("in_play", [])),
+                        model=current_state.get("model", "core"),
+                        notes=_form["notes"].strip(),
+                    )
                     if editing_recipe and not as_new:
-                        store.update(editing_recipe["id"], payload)
+                        store.update(editing_recipe.id, payload)
                     else:
                         store.save(payload)
-                    _form.update({"name": "", "notes": "", "adding_group": False, "new_group": ""})
+                    _form.update(
+                        {
+                            "name": "",
+                            "notes": "",
+                            "adding_group": False,
+                            "new_group": "",
+                        }
+                    )
                     refresh_after_change()
                     _drawer_content.refresh()
 
@@ -381,7 +404,7 @@ def build_recipe_drawer(
                     opacity = "1" if can_save else "0.4"
                     if editing_recipe:
                         ui.button(
-                            f'Update "{editing_recipe["name"]}"',
+                            f'Update "{editing_recipe.name}"',
                             on_click=lambda: _do_save(False),
                         ).style(
                             f"border:none;background:var(--accent);color:var(--accent-ink);"
@@ -420,14 +443,14 @@ def build_recipe_drawer(
             ).style("font-size:13px;color:var(--ink-soft);font-style:italic;")
         else:
             # Build group -> recipes mapping
-            by_group: dict[str, list[dict]] = {}
+            by_group: dict[str, list[Recipe]] = {}
             for r in all_recipes:
-                g = r.get("group") or "Ungrouped"
+                g = r.group or "Ungrouped"
                 by_group.setdefault(g, []).append(r)
 
-            group_order = [
-                g for g in all_groups if g in by_group
-            ] + [g for g in by_group if g not in all_groups]
+            group_order = [g for g in all_groups if g in by_group] + [
+                g for g in by_group if g not in all_groups
+            ]
 
             for g in group_order:
                 recipes_in_group = by_group.get(g, [])
@@ -439,12 +462,17 @@ def build_recipe_drawer(
                         def _toggle():
                             _collapsed[grp] = not _collapsed.get(grp, False)
                             _drawer_content.refresh()
+
                         return _toggle
 
-                    with ui.row().style(
-                        "display:flex;align-items:center;gap:8px;cursor:pointer;"
-                        "color:var(--ink);font-size:13.5px;font-weight:700;padding:4px 0;"
-                    ).on("click", _make_toggle(g)):
+                    with (
+                        ui.row()
+                        .style(
+                            "display:flex;align-items:center;gap:8px;cursor:pointer;"
+                            "color:var(--ink);font-size:13.5px;font-weight:700;padding:4px 0;"
+                        )
+                        .on("click", _make_toggle(g))
+                    ):
                         ui.label("▾" if is_open else "▸").style(
                             "font-size:10px;color:var(--ink-soft);width:10px;"
                         )
@@ -457,17 +485,16 @@ def build_recipe_drawer(
 
                     if is_open:
                         for r in recipes_in_group:
-                            r_id = r.get("id")
+                            r_id = r.id
                             is_editing_this = r_id == editing_id
                             item_style = (
                                 "border:1px solid var(--accent);"
                                 "box-shadow:0 0 0 1px var(--accent);"
-                                if is_editing_this else
-                                "border:1px solid var(--line);"
+                                if is_editing_this
+                                else "border:1px solid var(--line);"
                             )
                             with ui.column().style(
-                                item_style +
-                                "border-radius:10px;padding:11px;"
+                                item_style + "border-radius:10px;padding:11px;"
                                 "background:var(--field);"
                                 "display:flex;flex-direction:column;gap:7px;"
                             ):
@@ -475,10 +502,10 @@ def build_recipe_drawer(
                                 with ui.row().style(
                                     "display:flex;align-items:center;gap:7px;"
                                 ):
-                                    ui.label(r.get("name", "")).style(
+                                    ui.label(r.name).style(
                                         "flex:1;font-weight:700;color:var(--ink);"
                                     )
-                                    ui.label(r.get("model", "").upper()).style(
+                                    ui.label(r.model.upper()).style(
                                         "font-size:10px;font-family:var(--mono);"
                                         "color:var(--ink-soft);"
                                         "border:1px solid var(--line);"
@@ -486,7 +513,7 @@ def build_recipe_drawer(
                                     )
 
                                 # Ingredient chips
-                                items: list[str] = r.get("items", [])
+                                items: list[str] = r.items
                                 if items:
                                     with ui.row().style(
                                         "display:flex;flex-wrap:wrap;gap:4px;"
@@ -508,7 +535,7 @@ def build_recipe_drawer(
                                                 ui.label(title_case(n))
 
                                 # Notes
-                                notes_text = r.get("notes", "")
+                                notes_text = r.notes
                                 if notes_text:
                                     ui.label(notes_text).style(
                                         "font-size:12px;color:var(--ink-soft);"
@@ -517,20 +544,27 @@ def build_recipe_drawer(
                                     )
 
                                 # Action buttons
-                                def _make_load(recipe: dict):
+                                def _make_load(recipe: Recipe):
                                     def _load():
                                         on_load(recipe)
                                         refresh_after_change()
                                         _do_close()
+
                                     return _load
 
-                                def _make_duplicate(recipe: dict):
+                                def _make_duplicate(recipe: Recipe):
                                     def _dup():
-                                        copy = {k: v for k, v in recipe.items() if k != "id"}
-                                        copy["name"] = recipe.get("name", "") + " copy"
+                                        copy = recipe.model_copy(
+                                            update={
+                                                "id": None,
+                                                "updated": None,
+                                                "name": recipe.name + " copy",
+                                            }
+                                        )
                                         store.save(copy)
                                         refresh_after_change()
                                         _drawer_content.refresh()
+
                                     return _dup
 
                                 def _make_delete(rid):
@@ -538,6 +572,7 @@ def build_recipe_drawer(
                                         store.delete(rid)
                                         refresh_after_change()
                                         _drawer_content.refresh()
+
                                     return _del
 
                                 with ui.row().style(

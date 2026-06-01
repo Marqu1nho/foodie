@@ -323,6 +323,7 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "nicegui" },
     { name = "numpy" },
+    { name = "pydantic" },
     { name = "safetensors" },
 ]
 
@@ -337,6 +338,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=1.17.0" },
     { name = "nicegui", specifier = ">=3.12.1" },
     { name = "numpy", specifier = ">=2.4.6" },
+    { name = "pydantic", specifier = ">=2.13.4" },
     { name = "safetensors", specifier = ">=0.7.0" },
 ]
 

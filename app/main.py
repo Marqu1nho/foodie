@@ -18,8 +18,11 @@ warm "Mise" look.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from nicegui import ui
 
+from app.models import Recipe
 from app.services.epicure_service import EpicureService
 from app.services.recipe_store import RecipeStore
 from app.ui.theme import MISE_HEAD_HTML
@@ -50,41 +53,103 @@ MODELS = ["cooc", "core", "chem"]
 
 _init_cuisines = svc.cuisines("core")
 
+
 # ---------------------------------------------------------------------------
 # Shared server-side state (single-user local tool).
 # ---------------------------------------------------------------------------
-state = {
-    "in_play": ["chicken", "lemon", "garlic"],
-    "model": "core",  # CORE is the neutral default per the handoff
-    "view": "orbit",  # orbit | list
-    "fan": "single",  # single | duo | trio
-    "cuisine": _init_cuisines[0] if _init_cuisines else "",
-    "push": 0,  # int 0-80, treated as theta degrees
-    "k": 12,  # suggestions count, 6-20
-    "hovered": None,
-    "editing_id": None,
-}
+@dataclass
+class AppState:
+    """Typed in-memory state holder for the single-user app."""
+
+    in_play: list[str] = field(default_factory=lambda: ["chicken", "lemon", "garlic"])
+    model: str = "core"  # CORE is the neutral default per the handoff
+    view: str = "orbit"  # orbit | list
+    fan: str = "single"  # single | duo | trio
+    cuisine: str = _init_cuisines[0] if _init_cuisines else ""
+    push: int = 0  # int 0-80, treated as theta degrees
+    k: int = 12  # suggestions count, 6-20
+    hovered: str | None = None
+    editing_id: int | None = None
+
+
+S = AppState()
 
 
 def _fan_models() -> list[str]:
-    fan = state["fan"]
+    fan = S.fan
     if fan == "duo":
         return ["cooc", "chem"]
     if fan == "trio":
         return MODELS
-    return [state["model"]]
+    return [S.model]
 
 
 def compute(m: str) -> list[tuple[str, float]]:
     """Mirror app.jsx compute(). GUARD: never call pairings on empty in_play."""
-    in_play = state["in_play"]
+    in_play = S.in_play
     if not in_play:
         return []
-    if state["push"] > 0 and state["cuisine"]:
-        return svc.pairings_pushed(
-            m, in_play, state["cuisine"], float(state["push"]), state["k"]
+    if S.push > 0 and S.cuisine:
+        return svc.pairings_pushed(m, in_play, S.cuisine, float(S.push), S.k)
+    return svc.pairings(m, in_play, S.k)
+
+
+# ---------------------------------------------------------------------------
+# Static section builders (no reactive wiring — pure layout/labels).
+# ---------------------------------------------------------------------------
+def _build_header(open_drawer) -> None:
+    """Title block + the 'Recipes' drawer-open button."""
+    with ui.element("div").style(
+        "display:flex; align-items:center; gap:18px; flex-wrap:wrap;"
+    ):
+        with ui.element("div").style(
+            "display:flex; align-items:baseline; gap:6px; flex-shrink:0;"
+        ):
+            ui.label("Epicure").style(
+                "font-family:var(--display); font-size:26px; font-weight:700;"
+                " color:var(--ink); letter-spacing:-.01em;"
+            )
+            ui.label("lab").style(
+                "font-family:var(--mono); font-size:12px; color:var(--accent);"
+                " text-transform:uppercase; letter-spacing:.12em;"
+            )
+        ui.label("find what pairs — by recipe habit or flavour chemistry").style(
+            "font-size:13px; color:var(--ink-soft); font-style:italic; flex-shrink:1;"
         )
-    return svc.pairings(m, in_play, state["k"])
+        with ui.element("div").style(
+            "margin-left:auto; display:flex; align-items:center; gap:10px;"
+        ):
+            ui.button("Recipes", on_click=open_drawer).style(
+                "border:1px solid var(--line); background:var(--field);"
+                " color:var(--ink); padding:7px 14px; border-radius:9px;"
+                " font-size:13px; font-weight:600; box-shadow:none;"
+            ).props("flat no-caps")
+
+
+def _build_recipe_intro() -> None:
+    """The 'Your recipe — the base your suggestions build on' label row."""
+    with ui.element("div").style(
+        "display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;"
+    ):
+        ui.label("Your recipe").style(
+            "font-family:var(--display); font-size:16px; font-weight:700;"
+            " color:var(--ink); white-space:nowrap; flex-shrink:0;"
+        )
+        ui.label("— the base your suggestions build on").style(
+            "font-size:12.5px; color:var(--ink-soft); font-style:italic; white-space:nowrap;"
+        )
+
+
+def _build_footer_hint() -> None:
+    """Canvas-card footer hint line."""
+    with ui.element("div").style(
+        "display:flex; align-items:center; gap:8px; flex-wrap:wrap;"
+        " padding:10px 14px; border-top:1px solid var(--line);"
+        " font-size:12px; color:var(--ink-soft);"
+    ):
+        ui.html(
+            "<span><b style='color:var(--ink)'>Click</b> a suggestion to add it to your recipe — suggestions refine around it</span>"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -101,9 +166,9 @@ def index() -> None:
 
     # ---- handlers ----
     def add(name: str) -> None:
-        if name and name not in state["in_play"]:
-            state["in_play"].append(name)
-        state["hovered"] = None
+        if name and name not in S.in_play:
+            S.in_play.append(name)
+        S.hovered = None
         chip_refresh["fn"]()
         canvas_view.refresh()
         top_connections.refresh()
@@ -112,8 +177,8 @@ def index() -> None:
 
     def add_many(names: list[str]) -> None:
         for n in names:
-            if n not in state["in_play"]:
-                state["in_play"].append(n)
+            if n not in S.in_play:
+                S.in_play.append(n)
         chip_refresh["fn"]()
         canvas_view.refresh()
         top_connections.refresh()
@@ -121,8 +186,8 @@ def index() -> None:
         drawer["refresh"]()
 
     def remove(name: str) -> None:
-        if name in state["in_play"]:
-            state["in_play"].remove(name)
+        if name in S.in_play:
+            S.in_play.remove(name)
         chip_refresh["fn"]()
         canvas_view.refresh()
         top_connections.refresh()
@@ -130,7 +195,7 @@ def index() -> None:
         drawer["refresh"]()
 
     def clear_all() -> None:
-        state["in_play"] = []
+        S.in_play = []
         chip_refresh["fn"]()
         canvas_view.refresh()
         top_connections.refresh()
@@ -138,10 +203,10 @@ def index() -> None:
         drawer["refresh"]()
 
     def set_model(m: str) -> None:
-        state["model"] = m
+        S.model = m
         valid = svc.cuisines(m)
-        if state["cuisine"] not in valid:
-            state["cuisine"] = valid[0] if valid else ""
+        if S.cuisine not in valid:
+            S.cuisine = valid[0] if valid else ""
         cuisine_view.refresh()
         canvas_view.refresh()
         top_connections.refresh()
@@ -149,42 +214,42 @@ def index() -> None:
         toolbar_view.refresh()
 
     def set_view(v: str) -> None:
-        state["view"] = v
+        S.view = v
         canvas_view.refresh()
         top_connections.refresh()
 
     def set_fan(f: str) -> None:
-        state["fan"] = f
+        S.fan = f
         canvas_view.refresh()
         top_connections.refresh()
         why_view.refresh()
         toolbar_view.refresh()
 
     def set_cuisine(c: str) -> None:
-        state["cuisine"] = c
+        S.cuisine = c
         canvas_view.refresh()
         top_connections.refresh()
 
     def set_push(p: int) -> None:
-        state["push"] = int(p)
+        S.push = int(p)
         canvas_view.refresh()
         top_connections.refresh()
 
     def set_k(v: int) -> None:
-        state["k"] = int(v)
+        S.k = int(v)
         canvas_view.refresh()
         top_connections.refresh()
 
     def set_hovered(name) -> None:
         # keep cheap: only refresh the WHY panel
-        state["hovered"] = name
+        S.hovered = name
         why_view.refresh()
 
-    def load_recipe(r: dict) -> None:
-        state["in_play"] = list(r.get("items", []))
-        state["model"] = r.get("model", state["model"])
-        state["editing_id"] = r.get("id")
-        state["hovered"] = None
+    def load_recipe(r: Recipe) -> None:
+        S.in_play = list(r.items)
+        S.model = r.model or S.model
+        S.editing_id = r.id
+        S.hovered = None
         chip_refresh["fn"]()
         canvas_view.refresh()
         top_connections.refresh()
@@ -194,9 +259,9 @@ def index() -> None:
 
     def get_drawer_state() -> dict:
         return {
-            "in_play": state["in_play"],
-            "model": state["model"],
-            "editing_id": state["editing_id"],
+            "in_play": S.in_play,
+            "model": S.model,
+            "editing_id": S.editing_id,
         }
 
     # ===================================================================
@@ -208,43 +273,10 @@ def index() -> None:
         " font-family:var(--sans); color:var(--ink); font-size:15px;"
     ):
         # ---------------- header ----------------
-        with ui.element("div").style(
-            "display:flex; align-items:center; gap:18px; flex-wrap:wrap;"
-        ):
-            with ui.element("div").style(
-                "display:flex; align-items:baseline; gap:6px; flex-shrink:0;"
-            ):
-                ui.label("Epicure").style(
-                    "font-family:var(--display); font-size:26px; font-weight:700;"
-                    " color:var(--ink); letter-spacing:-.01em;"
-                )
-                ui.label("lab").style(
-                    "font-family:var(--mono); font-size:12px; color:var(--accent);"
-                    " text-transform:uppercase; letter-spacing:.12em;"
-                )
-            ui.label("find what pairs — by recipe habit or flavour chemistry").style(
-                "font-size:13px; color:var(--ink-soft); font-style:italic; flex-shrink:1;"
-            )
-            with ui.element("div").style(
-                "margin-left:auto; display:flex; align-items:center; gap:10px;"
-            ):
-                ui.button("Recipes", on_click=lambda: drawer["open"]()).style(
-                    "border:1px solid var(--line); background:var(--field);"
-                    " color:var(--ink); padding:7px 14px; border-radius:9px;"
-                    " font-size:13px; font-weight:600; box-shadow:none;"
-                ).props("flat no-caps")
+        _build_header(lambda: drawer["open"]())
 
         # ---------------- recipe = the query ----------------
-        with ui.element("div").style(
-            "display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;"
-        ):
-            ui.label("Your recipe").style(
-                "font-family:var(--display); font-size:16px; font-weight:700;"
-                " color:var(--ink); white-space:nowrap; flex-shrink:0;"
-            )
-            ui.label("— the base your suggestions build on").style(
-                "font-size:12.5px; color:var(--ink-soft); font-style:italic; white-space:nowrap;"
-            )
+        _build_recipe_intro()
 
         # input bar: chip input + paste toggle + save
         paste_open = {"v": False}
@@ -254,7 +286,7 @@ def index() -> None:
         ):
             chip_refresh["fn"] = build_chip_input(
                 svc,
-                lambda: state["in_play"],
+                lambda: S.in_play,
                 add,
                 remove,
                 clear_all,
@@ -310,25 +342,25 @@ def index() -> None:
                         # orbit/list toggle
                         ui.toggle(
                             {"orbit": "◉ Orbit", "list": "≣ List"},
-                            value=state["view"],
+                            value=S.view,
                             on_change=lambda e: set_view(e.value),
                         ).props("no-caps dense unelevated").style("font-size:12.5px;")
 
                         ui.element("div").style("flex:1; min-width:4px;")
 
                         # model selector OR compare note
-                        if state["fan"] == "single":
+                        if S.fan == "single":
                             with ui.element("div").style(
                                 "display:flex; align-items:center; gap:8px;"
                             ):
                                 ui.toggle(
                                     {m: m for m in MODELS},
-                                    value=state["model"],
+                                    value=S.model,
                                     on_change=lambda e: set_model(e.value),
                                 ).props("no-caps dense unelevated").style(
                                     "font-size:12.5px;"
                                 )
-                                ui.label(MODEL_BLURB[state["model"]]).style(
+                                ui.label(MODEL_BLURB[S.model]).style(
                                     "font-size:12px; color:var(--ink-soft); font-style:italic;"
                                 )
                         else:
@@ -352,14 +384,12 @@ def index() -> None:
                                 min=6,
                                 max=20,
                                 step=1,
-                                value=state["k"],
+                                value=S.k,
                                 on_change=lambda e: set_k(e.value),
                             ).props("dense").style(
                                 "width:90px; accent-color:var(--accent);"
                             )
-                            ui.label().bind_text_from(
-                                state, "k", lambda v: str(v)
-                            ).style(
+                            ui.label().bind_text_from(S, "k", lambda v: str(v)).style(
                                 "font-family:var(--mono); font-size:12.5px;"
                                 " color:var(--ink); width:20px; text-align:right;"
                             )
@@ -367,7 +397,7 @@ def index() -> None:
                         # single/2up/3up
                         ui.toggle(
                             {"single": "Single", "duo": "2-up", "trio": "3-up"},
-                            value=state["fan"],
+                            value=S.fan,
                             on_change=lambda e: set_fan(e.value),
                         ).props("no-caps dense unelevated").style("font-size:12.5px;")
 
@@ -379,7 +409,7 @@ def index() -> None:
                     with ui.element("div").style(
                         "min-height:560px; padding:4px; display:flex;"
                     ) as body:
-                        if state["fan"] != "single":
+                        if S.fan != "single":
                             fan_models = _fan_models()
                             results_by_model = {m: compute(m) for m in fan_models}
                             build_compare(
@@ -387,23 +417,23 @@ def index() -> None:
                                 svc,
                                 fan_models,
                                 results_by_model,
-                                state["in_play"],
+                                S.in_play,
                                 add,
                                 set_hovered,
                             )
-                        elif state["view"] == "list":
-                            results = compute(state["model"])
+                        elif S.view == "list":
+                            results = compute(S.model)
                             with ui.element("div").style(
                                 "padding:14px; width:100%;"
                             ) as lw:
                                 render_list(lw, svc, results, add, set_hovered)
                         else:
-                            results = compute(state["model"])
+                            results = compute(S.model)
                             render_orbit(
                                 body,
                                 svc,
                                 results,
-                                state["in_play"],
+                                S.in_play,
                                 add,
                                 set_hovered,
                             )
@@ -411,14 +441,7 @@ def index() -> None:
                 canvas_view()
 
                 # ---- footer hint ----
-                with ui.element("div").style(
-                    "display:flex; align-items:center; gap:8px; flex-wrap:wrap;"
-                    " padding:10px 14px; border-top:1px solid var(--line);"
-                    " font-size:12px; color:var(--ink-soft);"
-                ):
-                    ui.html(
-                        "<span><b style='color:var(--ink)'>Click</b> a suggestion to add it to your recipe — suggestions refine around it</span>"
-                    )
+                _build_footer_hint()
 
             # ===== sidebar =====
             with ui.element("div").style(
@@ -430,11 +453,11 @@ def index() -> None:
                 def cuisine_view() -> None:
                     build_cuisine_lean(
                         svc,
-                        lambda: state["cuisine"],
+                        lambda: S.cuisine,
                         set_cuisine,
-                        lambda: state["push"],
+                        lambda: S.push,
                         set_push,
-                        get_cuisines=lambda: svc.cuisines(state["model"]),
+                        get_cuisines=lambda: svc.cuisines(S.model),
                     )
 
                 cuisine_view()
@@ -448,19 +471,19 @@ def index() -> None:
                         "font-size:12px; text-transform:uppercase; letter-spacing:.06em;"
                         " color:var(--ink-soft); font-family:var(--mono); margin-bottom:10px;"
                     )
-                    why_container = ui.element("div").style("height:180px; overflow-y:auto;")
+                    why_container = ui.element("div").style(
+                        "height:180px; overflow-y:auto;"
+                    )
 
                     @ui.refreshable
                     def why_view() -> None:
-                        model_key = (
-                            state["model"] if state["fan"] == "single" else "core"
-                        )
+                        model_key = S.model if S.fan == "single" else "core"
                         build_why_panel(
                             why_container,
                             svc,
                             model_key,
-                            state["hovered"],
-                            state["in_play"],
+                            S.hovered,
+                            S.in_play,
                         )
 
                     why_view()
@@ -468,7 +491,7 @@ def index() -> None:
                 # top-connections card (orbit + single only)
                 @ui.refreshable
                 def top_connections() -> None:
-                    if state["view"] == "orbit" and state["fan"] == "single":
+                    if S.view == "orbit" and S.fan == "single":
                         with ui.element("div").style(
                             "background:var(--panel); border:1px solid var(--line);"
                             " border-radius:14px; padding:14px;"
@@ -478,7 +501,7 @@ def index() -> None:
                                 " letter-spacing:.06em; color:var(--ink-soft);"
                                 " font-family:var(--mono); margin-bottom:10px;"
                             )
-                            results = compute(state["model"])[:8]
+                            results = compute(S.model)[:8]
                             tc = ui.element("div")
                             render_list(
                                 tc, svc, results, add, set_hovered, compact=False

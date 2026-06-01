@@ -8,6 +8,7 @@ dependencies = [
     "huggingface-hub>=1.17.0",
     "nicegui>=3.12.1",
     "numpy>=2.4.6",
+    "pydantic>=2.13.4",
     "safetensors>=0.7.0",
 ]
 
