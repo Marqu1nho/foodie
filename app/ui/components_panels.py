@@ -12,8 +12,8 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from ui_common import group_color, title_case
-from recipe_store import RecipeStore
+from app.ui.common import group_color, title_case
+from app.services.recipe_store import RecipeStore
 
 # Model explanations (mirrors prototype MODEL_BLURB)
 MODEL_BLURB: dict[str, str] = {
@@ -149,7 +149,7 @@ def build_compare(
                         )
 
                     # Body: delegate to viz.render_list (lazy import)
-                    from viz import render_list  # noqa: PLC0415
+                    from app.ui.viz import render_list  # noqa: PLC0415
                     col_container = ui.element("div")
                     render_list(
                         col_container,

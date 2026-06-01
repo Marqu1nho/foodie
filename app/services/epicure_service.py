@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from epicure import Epicure
+from app.vendor.epicure import Epicure
 
 _REPOS = {
     "cooc": "Kaikaku/epicure-cooc",

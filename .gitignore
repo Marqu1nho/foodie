@@ -11,3 +11,4 @@ wheels/
 
 # Recipes storage
 recipes/
+__pycache__/

@@ -17,7 +17,7 @@ from typing import Callable
 
 from nicegui import ui
 
-from ui_common import group_color, title_case
+from app.ui.common import group_color, title_case
 
 # ---------------------------------------------------------------------------
 # Shared constants

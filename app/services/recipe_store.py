@@ -10,8 +10,9 @@ class RecipeStore:
 
     def __init__(self, base_dir: str = "recipes") -> None:
         """Initialize the recipe store with a base directory."""
-        # Resolve base_dir relative to this file's directory
-        self.base_dir = Path(__file__).parent / base_dir
+        # Resolve base_dir relative to project root (two levels above: services -> app -> root)
+        _p = Path(base_dir)
+        self.base_dir = _p if _p.is_absolute() else Path(__file__).resolve().parents[2] / base_dir
         # Create the base directory if it doesn't exist
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
