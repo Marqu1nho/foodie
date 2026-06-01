@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Iterable
 
 import numpy as np
 
@@ -80,7 +79,9 @@ class Epicure:
     # ----- constructors -----
 
     @classmethod
-    def from_pretrained(cls, repo_id_or_path: str, revision: str | None = None) -> "Epicure":
+    def from_pretrained(
+        cls, repo_id_or_path: str, revision: str | None = None
+    ) -> "Epicure":
         if os.path.isdir(repo_id_or_path):
             base = repo_id_or_path
             getp = lambda fn: os.path.join(base, fn)
@@ -107,7 +108,9 @@ class Epicure:
             )
             for m in modes_raw
         ]
-        supervised_poles = {k: np.array(v, dtype=np.float32) for k, v in sup_raw.items()}
+        supervised_poles = {
+            k: np.array(v, dtype=np.float32) for k, v in sup_raw.items()
+        }
         return cls(E, vocab, modes, supervised_poles, config)
 
     # ----- core operators -----
@@ -116,12 +119,14 @@ class Epicure:
         i = self.vocab[name]
         return self.E[i] if normalised else self.E_raw[i]
 
-    def neighbors(self, name: str, k: int = 5, exclude_self: bool = True) -> list[tuple[str, float]]:
+    def neighbors(
+        self, name: str, k: int = 5, exclude_self: bool = True
+    ) -> list[tuple[str, float]]:
         v = self.vec(name)
         sims = self.E @ v
         order = np.argsort(-sims)
         start = 1 if exclude_self else 0
-        return [(self.itos[int(i)], float(sims[i])) for i in order[start:start + k]]
+        return [(self.itos[int(i)], float(sims[i])) for i in order[start : start + k]]
 
     def slerp(
         self,
@@ -141,7 +146,11 @@ class Epicure:
         """
         seed_idx = self.vocab[seed]
         v = self.E[seed_idx]
-        d = self.supervised_poles[direction] if isinstance(direction, str) else direction
+        d = (
+            self.supervised_poles[direction]
+            if isinstance(direction, str)
+            else direction
+        )
         d = np.asarray(d, dtype=np.float32)
         d = _unit(d)
         # Gram-Schmidt: orthogonal component of d relative to v
