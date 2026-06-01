@@ -111,15 +111,10 @@ class EpicureService:
 
     # --- cuisine poles ---
 
-    def cuisines(self) -> list[str]:
-        """Cuisine pole keys present in ALL three models, so any selected model
-        can be leaned toward without a missing-pole KeyError."""
-        sets = [
-            {k for k in m.supervised_poles if k.startswith("cuisine:")}
-            for m in self._models.values()
-        ]
-        common = set.intersection(*sets) if sets else set()
-        return sorted(common)
+    def cuisines(self, model_key: str = "core") -> list[str]:
+        """Cuisine pole keys available in the given model, sorted."""
+        m = self._model(model_key)
+        return sorted(k for k in m.supervised_poles if k.startswith("cuisine:"))
 
     # --- slerp toward a cuisine ---
 

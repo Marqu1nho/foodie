@@ -361,6 +361,7 @@ def build_cuisine_lean(
     set_cuisine: Callable[[str], None],
     get_push: Callable[[], int],
     set_push: Callable[[int], None],
+    get_cuisines: Callable[[], list[str]] | None = None,
 ) -> None:
     """Build the 'Lean toward a cuisine' sidebar card inline at current context."""
 
@@ -378,7 +379,7 @@ def build_cuisine_lean(
             return "medium"
         return "bold"
 
-    cuisines = svc.cuisines()  # list of full keys like "cuisine:South_Asian"
+    cuisines = get_cuisines() if get_cuisines is not None else svc.cuisines()  # list of full keys like "cuisine:South_Asian"
 
     with ui.element("div").style(
         "background:var(--panel); border:1px solid var(--line); border-radius:14px;"

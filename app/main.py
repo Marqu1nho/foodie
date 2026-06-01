@@ -48,7 +48,7 @@ MODEL_BLURB = {
 }
 MODELS = ["cooc", "core", "chem"]
 
-_cuisines = svc.cuisines()
+_init_cuisines = svc.cuisines("core")
 
 # ---------------------------------------------------------------------------
 # Shared server-side state (single-user local tool).
@@ -58,7 +58,7 @@ state = {
     "model": "core",  # CORE is the neutral default per the handoff
     "view": "orbit",  # orbit | list
     "fan": "single",  # single | duo | trio
-    "cuisine": _cuisines[0] if _cuisines else "",
+    "cuisine": _init_cuisines[0] if _init_cuisines else "",
     "push": 0,  # int 0-80, treated as theta degrees
     "k": 12,  # suggestions count, 6-20
     "hovered": None,
@@ -139,6 +139,10 @@ def index() -> None:
 
     def set_model(m: str) -> None:
         state["model"] = m
+        valid = svc.cuisines(m)
+        if state["cuisine"] not in valid:
+            state["cuisine"] = valid[0] if valid else ""
+        cuisine_view.refresh()
         canvas_view.refresh()
         top_connections.refresh()
         why_view.refresh()
@@ -422,13 +426,18 @@ def index() -> None:
                 " position:sticky; top:14px;"
             ):
                 # cuisine-lean card
-                build_cuisine_lean(
-                    svc,
-                    lambda: state["cuisine"],
-                    set_cuisine,
-                    lambda: state["push"],
-                    set_push,
-                )
+                @ui.refreshable
+                def cuisine_view() -> None:
+                    build_cuisine_lean(
+                        svc,
+                        lambda: state["cuisine"],
+                        set_cuisine,
+                        lambda: state["push"],
+                        set_push,
+                        get_cuisines=lambda: svc.cuisines(state["model"]),
+                    )
+
+                cuisine_view()
 
                 # WHY card
                 with ui.element("div").style(
