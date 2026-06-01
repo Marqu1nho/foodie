@@ -442,13 +442,13 @@ def index() -> None:
                 # WHY card
                 with ui.element("div").style(
                     "background:var(--panel); border:1px solid var(--line);"
-                    " border-radius:14px; padding:14px; min-height:120px;"
+                    " border-radius:14px; padding:14px; height:230px; overflow:hidden;"
                 ):
                     ui.label("Why this pairs").style(
                         "font-size:12px; text-transform:uppercase; letter-spacing:.06em;"
                         " color:var(--ink-soft); font-family:var(--mono); margin-bottom:10px;"
                     )
-                    why_container = ui.element("div")
+                    why_container = ui.element("div").style("height:180px; overflow-y:auto;")
 
                     @ui.refreshable
                     def why_view() -> None:
