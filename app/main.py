@@ -371,6 +371,8 @@ def index() -> None:
                                 )
                                 ui.label(MODEL_BLURB[S.model]).style(
                                     "font-size:12px; color:var(--ink-soft); font-style:italic;"
+                                    " width:210px; white-space:nowrap; overflow:hidden;"
+                                    " text-overflow:ellipsis;"
                                 )
                         else:
                             note = " · ".join(m.upper() for m in _fan_models())
