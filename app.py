@@ -47,4 +47,4 @@ def index():
 
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(port=50000, title="Epicure", reload=False)
+    ui.run(port=50000, title="Epicure", reload=True)
