@@ -4,6 +4,7 @@ Exposes three builder functions:
   build_chip_input(svc, get_in_play, on_add, on_remove, on_clear) -> refresh callable
   build_paste_scratch(svc, on_add_many, on_close)
   build_cuisine_lean(svc, get_cuisine, set_cuisine, get_push, set_push)
+  build_flavor_lean(get_value, set_value)
 """
 
 from __future__ import annotations
@@ -470,3 +471,79 @@ def build_cuisine_lean(
                 push_label_el.set_text(_push_label(val))
 
             slider.on_value_change(_on_slider)
+
+
+# ---------------------------------------------------------------------------
+# 4. FlavorLean (Sweet ↔ Savory)
+# ---------------------------------------------------------------------------
+
+
+def build_flavor_lean(
+    get_value: Callable[[], int],
+    set_value: Callable[[int], None],
+) -> None:
+    """Build the 'Sweet ↔ savory' bipolar slider sidebar card inline at current context."""
+
+    def _flavor_label(val: int) -> str:
+        """Return a label like 'sweet · bold' or 'savory · subtle' or 'off'."""
+        if val == 0:
+            return "off"
+        magnitude: int = abs(val)
+        if magnitude <= 25:
+            strength = "subtle"
+        elif magnitude <= 50:
+            strength = "medium"
+        else:
+            strength = "bold"
+        side = "sweet" if val > 0 else "savory"
+        return f"{side} · {strength}"
+
+    with ui.element("div").style(
+        "background:var(--panel); border:1px solid var(--line); border-radius:14px;"
+        " padding:14px; display:flex; flex-direction:column; gap:8px;"
+    ):
+        # title
+        ui.label("Sweet ↔ savory").style(
+            "font-size:12px; text-transform:uppercase; letter-spacing:.06em;"
+            " color:var(--ink-soft); font-family:var(--mono); margin-bottom:2px;"
+        )
+        # helper subtext
+        ui.label(
+            "Optional — nudge the whole recipe toward sweeter or more savory pairings."
+        ).style(
+            "font-size:12.5px; color:var(--ink-soft); line-height:1.45; margin-top:-4px;"
+        )
+
+        # slider row with end labels
+        with ui.row().style("align-items:center; gap:10px; width:100%;"):
+            # left label: "savory"
+            ui.label("savory").style(
+                "font-family:var(--mono); font-size:11px; color:var(--ink-soft);"
+                " text-transform:lowercase; letter-spacing:.03em; flex:0 0 auto;"
+            )
+
+            # slider (flex:1)
+            slider = (
+                ui.slider(min=-80, max=80, step=1, value=get_value())
+                .style("flex:1; accent-color:var(--accent);")
+                .props("dense")
+            )
+
+            # right label: "sweet"
+            ui.label("sweet").style(
+                "font-family:var(--mono); font-size:11px; color:var(--ink-soft);"
+                " text-transform:lowercase; letter-spacing:.03em; flex:0 0 auto;"
+            )
+
+        # flavor strength label
+        flavor_label_el = ui.label(_flavor_label(get_value())).style(
+            "font-family:var(--mono); font-size:12.5px; color:var(--ink);"
+            " text-align:center; text-transform:uppercase; letter-spacing:.03em;"
+        )
+
+        def _on_slider(e: Any) -> None:
+            val: int = int(e.value)
+            set_value(val)
+            flavor_label_el.set_text(_flavor_label(val))
+
+        slider.on_value_change(_on_slider)

@@ -28,10 +28,12 @@ from app.services.epicure_service import EpicureService
 from app.services.recipe_store import RecipeStore
 from app.ui.theme import MISE_HEAD_HTML
 from app.ui.viz import render_orbit, render_list
+from app.leans import build_directions
 from app.ui.components_input import (
     build_chip_input,
     build_paste_scratch,
     build_cuisine_lean,
+    build_flavor_lean,
 )
 from app.ui.components_panels import (
     build_why_panel,
@@ -68,6 +70,7 @@ class AppState:
     fan: str = "single"  # single | duo | trio
     cuisine: str = _init_cuisines[0] if _init_cuisines else ""
     push: int = 0  # int 0-80, treated as theta degrees
+    flavor: int = 0  # bipolar -80..80: >0 sweet, <0 savory, 0 off
     k: int = 12  # suggestions count, 6-20
     hovered: str | None = None
     editing_id: int | None = None
@@ -87,12 +90,12 @@ def _fan_models() -> list[str]:
 
 def compute(m: str) -> list[tuple[str, float]]:
     """Mirror app.jsx compute(). GUARD: never call pairings on empty in_play."""
-    in_play = S.in_play
-    if not in_play:
+    if not S.in_play:
         return []
-    if S.push > 0 and S.cuisine:
-        return svc.pairings_pushed(m, in_play, S.cuisine, float(S.push), S.k)
-    return svc.pairings(m, in_play, S.k)
+    dirs = build_directions(svc, m, S.cuisine, S.push, S.flavor)
+    if dirs:
+        return svc.pairings_directed(m, S.in_play, dirs, S.k)
+    return svc.pairings(m, S.in_play, S.k)
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +236,11 @@ def index() -> None:
 
     def set_push(p: int) -> None:
         S.push = int(p)
+        canvas_view.refresh()
+        top_connections.refresh()
+
+    def set_flavor(v: int) -> None:
+        S.flavor = int(v)
         canvas_view.refresh()
         top_connections.refresh()
 
@@ -462,6 +470,9 @@ def index() -> None:
                     )
 
                 cuisine_view()
+
+                # flavor-lean card
+                build_flavor_lean(lambda: S.flavor, set_flavor)
 
                 # WHY card
                 with ui.element("div").style(

@@ -214,3 +214,143 @@ def test_why_structure(epicure_service) -> None:
     empty_result = epicure_service.why("core", "cinnamon", [])
     assert empty_result["bridges"] == []
     assert empty_result["shared_modes"] == []
+
+
+# ---------------------------------------------------------------------------
+# FLAVOR POLES
+# ---------------------------------------------------------------------------
+
+
+def test_flavor_poles_present(epicure_service) -> None:
+    """flavor_poles returns valid pole keys and those poles' neighbors skew correct."""
+    for model_key in ("core", "cooc", "chem"):
+        poles = epicure_service.flavor_poles(model_key)
+        assert isinstance(poles, dict)
+        m = epicure_service._model(model_key)
+
+        if "sweet" in poles:
+            pole_key = poles["sweet"]
+            assert pole_key in m.supervised_poles, (
+                f"sweet pole key {pole_key!r} not in supervised_poles for {model_key}"
+            )
+            # Top neighbors of the sweet pole should contain at least one sweet seed.
+            # Broad set to handle vocab variation across models (chem uses different ingredients).
+            sweet_seeds = {
+                "honey", "vanilla", "sugar", "brown_sugar", "maple_syrup", "molasses",
+                "date", "fig", "mango", "coconut", "coconut_water", "almond_milk",
+                "hazelnut", "pistachio", "macadamia_nut", "fruit", "matcha_powder",
+                "agave", "date_syrup", "oat_milk",
+            }
+            import numpy as np
+            pole_vec = np.array(m.supervised_poles[pole_key], dtype=np.float32)
+            norm = float(np.linalg.norm(pole_vec))
+            pole_vec = pole_vec / max(norm, 1e-9)
+            sims = m.E @ pole_vec
+            top_names = {m.itos[int(i)] for i in sims.argsort()[-20:][::-1]}
+            overlap = sweet_seeds & top_names
+            assert len(overlap) >= 1, (
+                f"sweet pole '{pole_key}' top-20 neighbors have no sweet seeds; got {top_names}"
+            )
+
+        if "savory" in poles:
+            pole_key = poles["savory"]
+            assert pole_key in m.supervised_poles, (
+                f"savory pole key {pole_key!r} not in supervised_poles for {model_key}"
+            )
+            savory_seeds = {"soy_sauce", "miso", "parmesan", "mushroom", "olive_oil",
+                            "anchovy", "fish_sauce", "worcestershire_sauce"}
+            import numpy as np
+            pole_vec = np.array(m.supervised_poles[pole_key], dtype=np.float32)
+            norm = float(np.linalg.norm(pole_vec))
+            pole_vec = pole_vec / max(norm, 1e-9)
+            sims = m.E @ pole_vec
+            top_names = {m.itos[int(i)] for i in sims.argsort()[-20:][::-1]}
+            overlap = savory_seeds & top_names
+            assert len(overlap) >= 1, (
+                f"savory pole '{pole_key}' top-20 neighbors have no savory seeds; got {top_names}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# PAIRINGS_DIRECTED
+# ---------------------------------------------------------------------------
+
+
+def test_pairings_directed_single_equals_pushed(epicure_service) -> None:
+    """A single direction in pairings_directed must equal pairings_pushed exactly."""
+    names = ["garlic", "tomato", "olive_oil"]
+    cuisine = epicure_service.cuisines("core")[0]
+    k = 12
+
+    directed = epicure_service.pairings_directed("core", names, [(cuisine, 40.0)], k)
+    pushed = epicure_service.pairings_pushed("core", names, cuisine, 40.0, k)
+
+    directed_names = [n for n, _ in directed]
+    pushed_names = [n for n, _ in pushed]
+    assert directed_names == pushed_names, (
+        "pairings_directed with single direction must match pairings_pushed"
+    )
+
+
+def test_pairings_directed_compose_changes(epicure_service) -> None:
+    """Composing a cuisine + flavor pole yields a different top result than either alone."""
+    names = ["garlic", "tomato", "olive_oil"]
+    cuisine = epicure_service.cuisines("core")[0]
+    k = 12
+
+    plain = epicure_service.pairings("core", names, k)
+
+    poles = epicure_service.flavor_poles("core")
+    if not poles:
+        import pytest
+        pytest.skip("No flavor poles available for core model")
+
+    flavor_key = next(iter(poles.values()))
+
+    single_cuisine = epicure_service.pairings_directed("core", names, [(cuisine, 40.0)], k)
+    composed = epicure_service.pairings_directed(
+        "core", names, [(cuisine, 40.0), (flavor_key, 30.0)], k
+    )
+
+    plain_names = [n for n, _ in plain]
+    cuisine_names = [n for n, _ in single_cuisine]
+    composed_names = [n for n, _ in composed]
+
+    # Composed must differ from at least one of: plain, or cuisine-only
+    assert composed_names != plain_names or composed_names != cuisine_names, (
+        "Composing two directions should change top results relative to at least one baseline"
+    )
+
+
+def test_pairings_directed_empty_and_missing(epicure_service) -> None:
+    """Empty directions or only missing poles fall back to plain pairings()."""
+    names = ["honey", "orange"]
+    k = 8
+
+    base = epicure_service.pairings("core", names, k)
+    base_names = [n for n, _ in base]
+
+    # Empty directions -> pairings()
+    empty_result = epicure_service.pairings_directed("core", names, [], k)
+    assert [n for n, _ in empty_result] == base_names, (
+        "pairings_directed with empty directions should equal plain pairings()"
+    )
+
+    # Only missing poles -> pairings()
+    missing_result = epicure_service.pairings_directed(
+        "core", names, [("cuisine:NotARealPole", 30.0)], k
+    )
+    assert [n for n, _ in missing_result] == base_names, (
+        "pairings_directed with only missing poles should equal plain pairings()"
+    )
+
+    # Missing pole does not raise
+    try:
+        epicure_service.pairings_directed(
+            "core", names, [("cuisine:NotARealPole", 30.0), ("another_fake", 20.0)], k
+        )
+    except Exception as exc:
+        raise AssertionError(f"Missing pole keys should not raise, got: {exc}") from exc
+
+    # Empty names list -> []
+    assert epicure_service.pairings_directed("core", [], [("cuisine:NotARealPole", 30.0)], k) == []

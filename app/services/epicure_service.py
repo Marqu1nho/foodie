@@ -5,11 +5,69 @@ No NiceGUI imports here — plain data in, plain data out.
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault(
+    "HF_HUB_OFFLINE", "1"
+)  # models are pre-cached; skip Hub metadata checks (faster boot, no unauthenticated-request warning)
+
 import math
 from typing import TypedDict
 
 import numpy as np
 from app.vendor.epicure import Epicure
+
+# ---------------------------------------------------------------------------
+# Flavor-pole validation seeds
+# ---------------------------------------------------------------------------
+# These are used at init to pick the best validated sweet/savory pole per model.
+# IMPORTANT: supervised-pole names lie — a pole labeled "sweet" may actually
+# capture savory compounds.  We validate by scoring candidates against seed
+# ingredients whose vocab membership is checked at runtime.
+#
+# Sweet candidates: keys starting with 'sweet_score'
+# Savory candidates: keys starting with 'umami_score' or 'cf_savory'
+#
+# Validated-in-CORE references (from inspecting top-10 nearest ingredients):
+#   SWEET  ~ 'sweet_score/Sweet fruits, nuts and cocktail spirits'
+#   SAVORY ~ 'umami_score/Savory vegetables, cheeses, and seafood'
+#          or 'cf_savory/Mediterranean savory pantry staples'
+_SWEET_SEEDS = [
+    "honey",
+    "vanilla",
+    "sugar",
+    "brown_sugar",
+    "maple_syrup",
+    "honey_mustard",
+    "molasses",
+    "agave",
+    "powdered_sugar",
+    "cane_sugar",
+    "date",
+    "fig",
+    "peach",
+    "mango",
+    "pineapple",
+]
+_SAVORY_SEEDS = [
+    "soy_sauce",
+    "miso",
+    "parmesan",
+    "mushroom",
+    "olive_oil",
+    "anchovy",
+    "fish_sauce",
+    "worcestershire_sauce",
+    "tamari",
+    "cheese",
+    "nutritional_yeast",
+    "capers",
+    "sun_dried_tomato",
+    "tahini",
+    "miso_paste",
+]
+_FLAVOR_POLE_TOP_N = 20  # how many nearest neighbors to inspect per candidate
+_FLAVOR_POLE_MIN_SCORE = 1  # minimum seed hits to accept a candidate
 
 
 class WhyMode(TypedDict):
@@ -62,6 +120,10 @@ class EpicureService:
         }
         print("All models loaded.")
         self._group_by_name = self._precompute_groups()
+        # Precompute validated sweet/savory poles for each model.
+        self._flavor_poles: dict[str, dict[str, str]] = {
+            key: self._compute_flavor_poles(self._models[key]) for key in _REPOS
+        }
 
     def _precompute_groups(self) -> dict[str, str]:
         """For every ingredient in the cooc vocab, find the closest fg_* binary mode."""
@@ -77,6 +139,57 @@ class EpicureService:
                     segment = prefix[3:]  # e.g. "Vegetable"
                     group = _FG_PREFIX_TO_GROUP.get(segment, "other")
             result[name] = group
+        return result
+
+    @staticmethod
+    def _score_pole_candidate(
+        m: Epicure,
+        pole_key: str,
+        seeds: list[str],
+    ) -> int:
+        """Return how many seed ingredients appear in the top-N nearest to the pole vec."""
+        pole_vec = _unit_vec(np.array(m.supervised_poles[pole_key], dtype=np.float32))
+        sims = m.E @ pole_vec
+        order = np.argsort(-sims)
+        top_names = {m.itos[int(i)] for i in order[:_FLAVOR_POLE_TOP_N]}
+        # Only count seeds that exist in vocab
+        valid_seeds = {s for s in seeds if s in m.vocab}
+        return len(valid_seeds & top_names)
+
+    def _compute_flavor_poles(self, m: Epicure) -> dict[str, str]:
+        """Pick the best validated sweet and savory pole for a single model."""
+        result: dict[str, str] = {}
+
+        # Sweet: candidates start with 'sweet_score'
+        sweet_candidates = [
+            k for k in m.supervised_poles if k.startswith("sweet_score")
+        ]
+        best_sweet_key: str | None = None
+        best_sweet_score = -1
+        for candidate in sweet_candidates:
+            score = self._score_pole_candidate(m, candidate, _SWEET_SEEDS)
+            if score > best_sweet_score:
+                best_sweet_score = score
+                best_sweet_key = candidate
+        if best_sweet_key is not None and best_sweet_score >= _FLAVOR_POLE_MIN_SCORE:
+            result["sweet"] = best_sweet_key
+
+        # Savory: candidates start with 'umami_score' or 'cf_savory'
+        savory_candidates = [
+            k
+            for k in m.supervised_poles
+            if k.startswith("umami_score") or k.startswith("cf_savory")
+        ]
+        best_savory_key: str | None = None
+        best_savory_score = -1
+        for candidate in savory_candidates:
+            score = self._score_pole_candidate(m, candidate, _SAVORY_SEEDS)
+            if score > best_savory_score:
+                best_savory_score = score
+                best_savory_key = candidate
+        if best_savory_key is not None and best_savory_score >= _FLAVOR_POLE_MIN_SCORE:
+            result["savory"] = best_savory_key
+
         return result
 
     def _model(self, key: str) -> Epicure:
@@ -132,6 +245,25 @@ class EpicureService:
             key: self._model(key).neighbors(name, k=k, exclude_self=True)
             for key in _REPOS
         }
+
+    # --- flavor poles ---
+
+    def flavor_poles(self, model_key: str) -> dict[str, str]:
+        """Return the validated best pole keys for sweet/savory for the given model.
+
+        Keys present in the returned dict: "sweet" and/or "savory".
+        Each value is a supervised-pole key present in that model's supervised_poles.
+        A key is omitted if no candidate clears the minimum seed-hit bar.
+
+        Determination is done at __init__ time (precomputed once per model) by
+        scoring candidate poles against seed ingredient sets — see module-level
+        _SWEET_SEEDS / _SAVORY_SEEDS.
+        """
+        if model_key not in self._flavor_poles:
+            raise KeyError(
+                f"Unknown model key '{model_key}'. Choose from: {list(self._models)}"
+            )
+        return dict(self._flavor_poles[model_key])
 
     # --- cuisine poles ---
 
@@ -212,36 +344,65 @@ class EpicureService:
         """Sorted distinct group keys present in the precomputed map."""
         return sorted(set(self._group_by_name.values()))
 
-    # --- cuisine-pushed pairings ---
+    # --- composable directed pairings ---
 
-    def pairings_pushed(
+    def pairings_directed(
         self,
         model_key: str,
         names: list[str],
-        cuisine_key: str,
-        theta_deg: float,
+        directions: list[tuple[str, float]],
         k: int = 12,
     ) -> list[tuple[str, float]]:
-        """Like pairings(), but rotate the recipe centroid toward a cuisine pole first."""
+        """Rotate a recipe centroid by a composed weighted sum of pole directions.
+
+        Each entry in ``directions`` is a (pole_key, strength) pair.  Poles not
+        present in the model's supervised_poles are silently skipped (defensive).
+        Directions with strength <= 0 are also skipped.
+
+        The rotation angle theta_deg is derived as sqrt(sum(strength_i^2)) over
+        contributing directions, capped at 80 degrees.  This means a single
+        direction (pole, theta) is equivalent to pairings_pushed(pole, theta).
+
+        If no valid directions remain after filtering, falls back to plain
+        pairings().  If names is empty returns [].
+        """
+        if not names:
+            return []
+
         m = self._model(model_key)
-        if cuisine_key not in m.supervised_poles:
-            # Pole not defined for this model — skip the lean, just pair.
-            return self.pairings(model_key, names, k)
+
+        # Build recipe centroid.
         vecs = np.stack([m.vec(n, normalised=True) for n in names], axis=0)
         centroid = vecs.mean(axis=0)
         v = _unit_vec(centroid)
 
-        d = np.array(m.supervised_poles[cuisine_key], dtype=np.float32)
-        d = _unit_vec(d)
+        # Accumulate weighted pole directions.
+        D = np.zeros_like(v)
+        sum_sq: float = 0.0
+        for pole_key, strength in directions:
+            if strength <= 0:
+                continue
+            if pole_key not in m.supervised_poles:
+                continue
+            pole_vec = np.array(m.supervised_poles[pole_key], dtype=np.float32)
+            D = D + strength * _unit_vec(pole_vec)
+            sum_sq += float(strength) ** 2
 
-        # Gram-Schmidt: orthogonal component of d relative to v
+        # If D is ~zero (no valid directions) fall back to plain pairings.
+        if np.linalg.norm(D) < _EPS:
+            return self.pairings(model_key, names, k)
+
+        d = _unit_vec(D)
+        theta_deg = min(80.0, math.sqrt(sum_sq))
+
+        # Gram-Schmidt: orthogonal component of d relative to v.
         d_perp = d - float(d @ v) * v
         n_perp = np.linalg.norm(d_perp)
-        if n_perp < 1e-9:
+        if n_perp < _EPS:
             q = v
         else:
             d_perp = d_perp / n_perp
-            theta = math.radians(float(theta_deg))
+            theta = math.radians(theta_deg)
             q = math.cos(theta) * v + math.sin(theta) * d_perp
             q = _unit_vec(q)
 
@@ -252,6 +413,25 @@ class EpicureService:
 
         order = np.argsort(-sims)
         return [(m.itos[int(i)], float(sims[i])) for i in order[:k]]
+
+    # --- cuisine-pushed pairings (delegates to pairings_directed) ---
+
+    def pairings_pushed(
+        self,
+        model_key: str,
+        names: list[str],
+        cuisine_key: str,
+        theta_deg: float,
+        k: int = 12,
+    ) -> list[tuple[str, float]]:
+        """Like pairings(), but rotate the recipe centroid toward a pole first.
+
+        Delegates to pairings_directed() with a single direction, preserving the
+        existing API and missing-pole fallback behaviour.
+        """
+        return self.pairings_directed(
+            model_key, names, [(cuisine_key, float(theta_deg))], k
+        )
 
     # --- why does this pair ---
 
