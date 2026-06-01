@@ -112,8 +112,14 @@ class EpicureService:
     # --- cuisine poles ---
 
     def cuisines(self) -> list[str]:
-        """Full cuisine pole keys (e.g. 'cuisine:South_Asian') from the cooc model."""
-        return self._models["cooc"].list_supervised_poles(prefix="cuisine:")
+        """Cuisine pole keys present in ALL three models, so any selected model
+        can be leaned toward without a missing-pole KeyError."""
+        sets = [
+            {k for k in m.supervised_poles if k.startswith("cuisine:")}
+            for m in self._models.values()
+        ]
+        common = set.intersection(*sets) if sets else set()
+        return sorted(common)
 
     # --- slerp toward a cuisine ---
 
@@ -199,6 +205,9 @@ class EpicureService:
     ) -> list[tuple[str, float]]:
         """Like pairings(), but rotate the recipe centroid toward a cuisine pole first."""
         m = self._model(model_key)
+        if cuisine_key not in m.supervised_poles:
+            # Pole not defined for this model — skip the lean, just pair.
+            return self.pairings(model_key, names, k)
         vecs = np.stack([m.vec(n, normalised=True) for n in names], axis=0)
         centroid = vecs.mean(axis=0)
         v = _unit_vec(centroid)

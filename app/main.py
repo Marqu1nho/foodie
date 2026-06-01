@@ -267,10 +267,10 @@ def index() -> None:
             ).props("flat no-caps")
 
             ui.button("Save as recipe", on_click=lambda: drawer["open"]()).style(
-                "border:none; background:var(--accent); color:var(--accent-ink);"
+                "border:none; background:var(--accent); color:#fff;"
                 " padding:10px 14px; border-radius:10px; font-size:13px;"
                 " font-weight:700; box-shadow:none;"
-            ).props("flat no-caps")
+            ).props("no-caps text-color=white")
 
         @ui.refreshable
         def paste_area() -> None:
