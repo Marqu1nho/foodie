@@ -17,33 +17,22 @@ from epicure_service import EpicureService
 # ---------------------------------------------------------------------------
 
 def render_results(container: ui.element, results: list[tuple[str, float]]) -> None:
-    """Clear container and populate it with a ranked result list."""
+    """Clear container and populate it with a ranked result list using ui.table."""
     container.clear()
     with container:
         if not results:
             ui.label("No results.").classes("text-gray-400 italic")
             return
-        with ui.element("table").classes("w-full text-sm border-collapse"):
-            with ui.element("thead"):
-                with ui.element("tr").classes("bg-gray-100 text-left"):
-                    ui.element("th").classes("px-3 py-1 border").text = "#"
-                    ui.element("th").classes("px-3 py-1 border").text = "Ingredient"
-                    ui.element("th").classes("px-3 py-1 border text-right").text = "Score"
-            with ui.element("tbody"):
-                for rank, (name, score) in enumerate(results, 1):
-                    row_cls = "bg-white" if rank % 2 == 1 else "bg-gray-50"
-                    with ui.element("tr").classes(row_cls):
-                        ui.element("td").classes("px-3 py-1 border text-gray-400").text = str(rank)
-                        ui.element("td").classes("px-3 py-1 border font-medium").text = name.replace("_", " ")
-                        ui.element("td").classes("px-3 py-1 border text-right font-mono").text = f"{score:.3f}"
-
-
-def render_compare_column(container: ui.element, model_key: str, results: list[tuple[str, float]]) -> None:
-    """Render a single model-column inside the Compare tab."""
-    container.clear()
-    with container:
-        ui.label(model_key.upper()).classes("font-bold text-center text-indigo-700 mb-1")
-        render_results(container, results)  # re-uses the same container context
+        columns = [
+            {"name": "rank", "label": "#", "field": "rank", "align": "left"},
+            {"name": "ingredient", "label": "Ingredient", "field": "ingredient", "align": "left"},
+            {"name": "score", "label": "Score", "field": "score", "align": "right"},
+        ]
+        rows = [
+            {"rank": i, "ingredient": name.replace("_", " "), "score": f"{score:.3f}"}
+            for i, (name, score) in enumerate(results, 1)
+        ]
+        ui.table(columns=columns, rows=rows, row_key="rank").classes("w-full")
 
 
 def _model_selector(default: str = "cooc") -> ui.select:
@@ -98,26 +87,60 @@ def build_explore_tab(svc: EpicureService, vocab: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 def build_leftovers_tab(svc: EpicureService, vocab: list[str]) -> None:
-    """Multi-ingredient centroid -> pairings."""
+    """Multi-ingredient chip-flow -> pairings."""
+    selected: list[str] = []
+
     with ui.card().classes("w-full gap-2"):
         ui.label("Select what you have on hand; get the best pairing suggestions.").classes("text-gray-500 text-sm")
+
         with ui.row().classes("items-end gap-4 flex-wrap"):
-            ingredients = _ingredient_select(vocab, "Ingredients (select multiple)", multiple=True)
+            add_select = ui.select(
+                options=vocab,
+                with_input=True,
+                label="Add ingredient",
+            ).classes("w-72")
             model_sel = _model_selector("cooc")
             k_input = ui.number(label="Top-k", value=15, min=1, max=50, step=1).classes("w-24")
             btn = ui.button("Find Pairings", icon="kitchen")
 
+        chips_container = ui.row().classes("flex-wrap gap-2 mt-1")
+
+        def refresh_chips() -> None:
+            chips_container.clear()
+            with chips_container:
+                if not selected:
+                    ui.label("No ingredients added yet.").classes("text-gray-400 italic text-sm")
+                    return
+                for name in list(selected):
+                    chip = ui.chip(name.replace("_", " "), removable=True).classes("bg-indigo-100")
+                    chip.on("remove", lambda e, n=name: remove_ingredient(n))
+
+        def remove_ingredient(name: str) -> None:
+            if name in selected:
+                selected.remove(name)
+            refresh_chips()
+
+        def on_add(e) -> None:
+            value = e.args
+            if not value:
+                return
+            if value not in selected:
+                selected.append(value)
+            refresh_chips()
+            add_select.set_value(None)
+
+        add_select.on("update:model-value", on_add)
+
+        refresh_chips()
+
         results_box = ui.element("div").classes("mt-2 w-full")
 
         def run_query():
-            names = ingredients.value
-            if not names:
-                ui.notify("Please select at least one ingredient.", type="warning")
+            if not selected:
+                ui.notify("Please add at least one ingredient.", type="warning")
                 return
-            if isinstance(names, str):
-                names = [names]
             try:
-                res = svc.pairings(model_sel.value, list(names), k=int(k_input.value))
+                res = svc.pairings(model_sel.value, list(selected), k=int(k_input.value))
                 render_results(results_box, res)
             except Exception as e:
                 ui.notify(str(e), type="negative")
@@ -157,7 +180,8 @@ def build_compare_tab(svc: EpicureService, vocab: list[str]) -> None:
                     col.clear()
                     with col:
                         ui.label(key.upper()).classes("font-bold text-center text-indigo-700 mb-1 block")
-                        render_results(col, results[key])
+                        inner = ui.element("div").classes("w-full")
+                    render_results(inner, results[key])
             except Exception as e:
                 ui.notify(str(e), type="negative")
 
