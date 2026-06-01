@@ -24,6 +24,9 @@ testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
 
+[tool.ruff]
+extend-exclude = ["app/vendor"]
+
 [tool.mypy]
 files = ["app", "tests"]
 ignore_missing_imports = true

@@ -86,7 +86,7 @@ def build_chip_input(
     # --- outer container (relative positioning anchor) ---
     with ui.element("div").style(
         "position:relative; flex:1; min-width:280px;"
-    ) as container:
+    ):
         # ---- static bordered field (chips + inline input share one row) ----
         with ui.element("div").style(
             "display:flex; flex-wrap:wrap; gap:6px; align-items:center;"

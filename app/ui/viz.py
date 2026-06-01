@@ -220,7 +220,7 @@ def render_orbit(
         with ui.element("div").style(
             "position:relative; width:100%; aspect-ratio:680/560; min-height:520px; "
             "overflow:hidden;"
-        ) as orbit_container:
+        ):
             # --- SVG edge underlay ---
             if edges:
                 edge_lines = "".join(
@@ -306,7 +306,7 @@ def render_orbit(
 
                     # Score label + "+" affordance (revealed on hover via separate
                     # elements; NiceGUI lacks hover pseudo-state so we use JS toggle)
-                    score_lbl = (
+                    (
                         ui.label(f"{score:.2f}")
                         .style(
                             "font-size:10px; font-family:var(--mono); color:var(--ink-soft); "
