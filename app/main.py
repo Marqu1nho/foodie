@@ -55,12 +55,12 @@ _cuisines = svc.cuisines()
 # ---------------------------------------------------------------------------
 state = {
     "in_play": ["chicken", "lemon", "garlic"],
-    "model": "core",        # CORE is the neutral default per the handoff
-    "view": "orbit",        # orbit | list
-    "fan": "single",        # single | duo | trio
+    "model": "core",  # CORE is the neutral default per the handoff
+    "view": "orbit",  # orbit | list
+    "fan": "single",  # single | duo | trio
     "cuisine": _cuisines[0] if _cuisines else "",
-    "push": 0,              # int 0-80, treated as theta degrees
-    "k": 12,                # suggestions count, 6-20
+    "push": 0,  # int 0-80, treated as theta degrees
+    "k": 12,  # suggestions count, 6-20
     "hovered": None,
     "editing_id": None,
 }
@@ -218,9 +218,7 @@ def index() -> None:
                     "font-family:var(--mono); font-size:12px; color:var(--accent);"
                     " text-transform:uppercase; letter-spacing:.12em;"
                 )
-            ui.label(
-                "find what pairs — by recipe habit or flavour chemistry"
-            ).style(
+            ui.label("find what pairs — by recipe habit or flavour chemistry").style(
                 "font-size:13px; color:var(--ink-soft); font-style:italic; flex-shrink:1;"
             )
             with ui.element("div").style(
@@ -264,13 +262,11 @@ def index() -> None:
 
             ui.button("Paste a list", on_click=_toggle_paste).style(
                 "border:1px solid var(--line); background:var(--field);"
-                " color:var(--ink-soft); padding:10px 12px; border-radius:10px;"
+                " color:var(--ink); padding:10px 12px; border-radius:10px;"
                 " font-size:13px; font-weight:600; box-shadow:none;"
             ).props("flat no-caps")
 
-            ui.button(
-                "Save as recipe", on_click=lambda: drawer["open"]()
-            ).style(
+            ui.button("Save as recipe", on_click=lambda: drawer["open"]()).style(
                 "border:none; background:var(--accent); color:var(--accent-ink);"
                 " padding:10px 14px; border-radius:10px; font-size:13px;"
                 " font-weight:700; box-shadow:none;"
@@ -279,6 +275,7 @@ def index() -> None:
         @ui.refreshable
         def paste_area() -> None:
             if paste_open["v"]:
+
                 def _close() -> None:
                     paste_open["v"] = False
                     paste_area.refresh()
@@ -324,7 +321,9 @@ def index() -> None:
                                     {m: m for m in MODELS},
                                     value=state["model"],
                                     on_change=lambda e: set_model(e.value),
-                                ).props("no-caps dense unelevated").style("font-size:12.5px;")
+                                ).props("no-caps dense unelevated").style(
+                                    "font-size:12.5px;"
+                                )
                                 ui.label(MODEL_BLURB[state["model"]]).style(
                                     "font-size:12px; color:var(--ink-soft); font-style:italic;"
                                 )
@@ -346,9 +345,14 @@ def index() -> None:
                                 " font-family:var(--mono);"
                             )
                             ui.slider(
-                                min=6, max=20, step=1, value=state["k"],
+                                min=6,
+                                max=20,
+                                step=1,
+                                value=state["k"],
                                 on_change=lambda e: set_k(e.value),
-                            ).props("dense").style("width:90px; accent-color:var(--accent);")
+                            ).props("dense").style(
+                                "width:90px; accent-color:var(--accent);"
+                            )
                             ui.label().bind_text_from(
                                 state, "k", lambda v: str(v)
                             ).style(
@@ -375,17 +379,29 @@ def index() -> None:
                             fan_models = _fan_models()
                             results_by_model = {m: compute(m) for m in fan_models}
                             build_compare(
-                                body, svc, fan_models, results_by_model,
-                                state["in_play"], add, set_hovered,
+                                body,
+                                svc,
+                                fan_models,
+                                results_by_model,
+                                state["in_play"],
+                                add,
+                                set_hovered,
                             )
                         elif state["view"] == "list":
                             results = compute(state["model"])
-                            with ui.element("div").style("padding:14px; width:100%;") as lw:
+                            with ui.element("div").style(
+                                "padding:14px; width:100%;"
+                            ) as lw:
                                 render_list(lw, svc, results, add, set_hovered)
                         else:
                             results = compute(state["model"])
                             render_orbit(
-                                body, svc, results, state["in_play"], add, set_hovered,
+                                body,
+                                svc,
+                                results,
+                                state["in_play"],
+                                add,
+                                set_hovered,
                             )
 
                 canvas_view()
@@ -427,10 +443,15 @@ def index() -> None:
 
                     @ui.refreshable
                     def why_view() -> None:
-                        model_key = state["model"] if state["fan"] == "single" else "core"
+                        model_key = (
+                            state["model"] if state["fan"] == "single" else "core"
+                        )
                         build_why_panel(
-                            why_container, svc, model_key,
-                            state["hovered"], state["in_play"],
+                            why_container,
+                            svc,
+                            model_key,
+                            state["hovered"],
+                            state["in_play"],
                         )
 
                     why_view()
@@ -450,14 +471,19 @@ def index() -> None:
                             )
                             results = compute(state["model"])[:8]
                             tc = ui.element("div")
-                            render_list(tc, svc, results, add, set_hovered, compact=False)
+                            render_list(
+                                tc, svc, results, add, set_hovered, compact=False
+                            )
 
                 top_connections()
 
     # ---- recipe drawer (built last; needs handlers) ----
     drawer.update(
         build_recipe_drawer(
-            svc, store, get_drawer_state, load_recipe,
+            svc,
+            store,
+            get_drawer_state,
+            load_recipe,
             lambda: chip_refresh["fn"](),
         )
     )

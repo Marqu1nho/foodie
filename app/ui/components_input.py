@@ -82,18 +82,17 @@ def build_chip_input(
         "position:relative; flex:1; min-width:280px;"
     ) as container:
 
-        # ---- chip box (field-styled, wraps) ----
-        @ui.refreshable
-        def chips_area():
-            in_play = get_in_play()
-            placeholder = "add another…" if in_play else "type an ingredient, press Enter…"
-
-            with ui.element("div").style(
-                "display:flex; flex-wrap:wrap; gap:6px; align-items:center;"
-                " padding:8px;"
-                " background:var(--field); border:1px solid var(--line); border-radius:12px;"
-                " min-height:46px; cursor:text;"
-            ):
+        # ---- static bordered field (chips + inline input share one row) ----
+        with ui.element("div").style(
+            "display:flex; flex-wrap:wrap; gap:6px; align-items:center;"
+            " padding:8px;"
+            " background:var(--field); border:1px solid var(--line); border-radius:12px;"
+            " min-height:46px; cursor:text;"
+        ):
+            # ---- chips area (refreshable — only chips + optional clear button) ----
+            @ui.refreshable
+            def chips_area():
+                in_play = get_in_play()
                 # chips
                 for n in in_play:
                     color = group_color(svc.group_of(n))
@@ -124,10 +123,20 @@ def build_chip_input(
                             " padding:0; margin-left:2px; min-width:unset;"
                         ).props("flat dense")
 
-                # persistent text input — do NOT recreate on refresh
-                # (rendered outside chips_area to preserve focus)
+            chips_area()
 
-                # clear-all button
+            # ---- persistent text input (inside the field, after chips) ----
+            inp = ui.input(placeholder="type an ingredient, press Enter…").style(
+                "flex:1; min-width:140px; border:none; outline:none;"
+                " background:transparent; color:var(--ink); font-size:15px;"
+                " padding:4px 2px;"
+            ).props("borderless dense hide-bottom-space")
+            input_ref.append(inp)
+
+            # ---- clear-all button (after input, no auto-margin so it stays inline) ----
+            @ui.refreshable
+            def clear_area():
+                in_play = get_in_play()
                 if len(in_play) > 1:
                     def _clear():
                         on_clear()
@@ -135,22 +144,15 @@ def build_chip_input(
                             input_ref[0].set_value("")
                         state["open"] = False
                         chips_area.refresh()
+                        clear_area.refresh()
                         dropdown_area.refresh()
                     ui.button("clear", on_click=_clear).style(
-                        "margin-left:auto; border:none; background:none;"
+                        "margin-left:4px; border:none; background:none;"
                         " color:var(--ink-soft); cursor:pointer; font-size:12px;"
                         " text-decoration:underline; min-width:unset;"
                     ).props("flat dense")
 
-        chips_area()
-
-        # ---- persistent text input (lives outside the refreshable so it keeps focus) ----
-        inp = ui.input(placeholder="type an ingredient, press Enter…").style(
-            "flex:1; min-width:140px; border:none; outline:none;"
-            " background:transparent; color:var(--ink); font-size:15px;"
-            " padding:4px 2px; position:relative; margin-top:4px;"
-        ).props("borderless dense hide-bottom-space")
-        input_ref.append(inp)
+            clear_area()
 
         # watch value changes for comma/semicolon delimiter
         def _on_value_change(e):
@@ -172,9 +174,7 @@ def build_chip_input(
             dropdown_area.refresh()
             # update placeholder in chips area (minor: skip refresh for perf)
 
-        # NiceGUI 3.x listens on the Quasar/Vue kebab event name; the camelCase
-        # "update:modelValue" form never fires (fixed during integration).
-        inp.on("update:model-value", _on_value_change)
+        inp.on_value_change(_on_value_change)
 
         # keydown: Enter, Backspace, Escape, ArrowDown, ArrowUp
         def _on_keydown(e):
@@ -250,6 +250,7 @@ def build_chip_input(
     def refresh():
         """Re-sync the chips region after external state changes."""
         chips_area.refresh()
+        clear_area.refresh()
         dropdown_area.refresh()
 
     return refresh
@@ -347,7 +348,7 @@ def build_paste_scratch(
             parsed["miss"] = miss
             footer_area.refresh()
 
-        ta.on("update:model-value", _on_ta_change)
+        ta.on_value_change(_on_ta_change)
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +417,7 @@ def build_cuisine_lean(
             if full_key:
                 set_cuisine(full_key)
 
-        sel.on("update:model-value", _on_select)
+        sel.on_value_change(_on_select)
 
         # slider row
         with ui.row().style("align-items:center; gap:10px; width:100%;"):
@@ -435,4 +436,4 @@ def build_cuisine_lean(
                 set_push(val)
                 push_label_el.set_text(_push_label(val))
 
-            slider.on("update:model-value", _on_slider)
+            slider.on_value_change(_on_slider)
