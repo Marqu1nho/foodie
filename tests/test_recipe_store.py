@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 
@@ -8,13 +10,13 @@ from app.services.recipe_store import RecipeStore
 class TestRecipeStoreBasics:
     """Test basic RecipeStore functionality."""
 
-    def test_groups_includes_defaults(self, recipe_store):
+    def test_groups_includes_defaults(self, recipe_store) -> None:
         """groups() contains all DEFAULT_GROUPS."""
         groups = recipe_store.groups()
         for default_group in RecipeStore.DEFAULT_GROUPS:
             assert default_group in groups
 
-    def test_save_assigns_id_and_updated(self, recipe_store):
+    def test_save_assigns_id_and_updated(self, recipe_store) -> None:
         """Saving a Recipe without id returns one with an int id and int updated."""
         recipe_input = Recipe(
             name="Test Recipe",
@@ -45,7 +47,7 @@ class TestRecipeStoreBasics:
         assert stored["id"] == result.id
         assert stored["updated"] == result.updated
 
-    def test_get_roundtrips(self, recipe_store):
+    def test_get_roundtrips(self, recipe_store) -> None:
         """Save then get(id) returns an equivalent recipe."""
         recipe_input = Recipe(
             name="Honey Wine",
@@ -68,7 +70,7 @@ class TestRecipeStoreBasics:
         assert retrieved.notes == "sweet and golden"
         assert retrieved.id == recipe_id
 
-    def test_list_newest_first(self, recipe_store):
+    def test_list_newest_first(self, recipe_store) -> None:
         """list() is sorted by 'updated' descending (newest first)."""
         # Create three recipes with explicit ids to guarantee distinct ids
         # and spacing in time to ensure distinct updated timestamps
@@ -119,7 +121,7 @@ class TestRecipeStoreBasics:
         for i in range(len(recipes) - 1):
             assert recipes[i].updated >= recipes[i + 1].updated
 
-    def test_update_in_place(self, recipe_store):
+    def test_update_in_place(self, recipe_store) -> None:
         """save, then update(id, {...changed...}) keeps same id and reflects changes."""
         recipe_input = Recipe(
             name="Original Name",
@@ -157,7 +159,7 @@ class TestRecipeStoreBasics:
         assert retrieved.notes == "updated notes"
         assert retrieved.id == recipe_id
 
-    def test_update_group_move(self, recipe_store):
+    def test_update_group_move(self, recipe_store) -> None:
         """Update with group change moves file and removes old one."""
         recipe_input = Recipe(
             name="Mead to Experiment",
@@ -197,7 +199,7 @@ class TestRecipeStoreBasics:
         assert len(matching) == 1
         assert matching[0].group == "Experiments"
 
-    def test_delete(self, recipe_store):
+    def test_delete(self, recipe_store) -> None:
         """delete(id) returns True, get() is None, list() no longer contains it."""
         recipe_input = Recipe(
             name="To Delete",
@@ -224,12 +226,12 @@ class TestRecipeStoreBasics:
         recipes = recipe_store.list()
         assert recipe_id not in [r.id for r in recipes]
 
-    def test_delete_missing_id_returns_false(self, recipe_store):
+    def test_delete_missing_id_returns_false(self, recipe_store) -> None:
         """delete(missing_id) returns False."""
         result = recipe_store.delete(99999)
         assert result is False
 
-    def test_bad_json_skipped(self, recipe_store):
+    def test_bad_json_skipped(self, recipe_store) -> None:
         """list() ignores unparseable JSON files."""
         # Create a group folder and add a bad JSON file
         group_dir = recipe_store.base_dir / "Meads"
@@ -254,7 +256,7 @@ class TestRecipeStoreBasics:
         assert len(recipes) == 1
         assert recipes[0].name == "Good Recipe"
 
-    def test_safe_group_name(self, recipe_store):
+    def test_safe_group_name(self, recipe_store) -> None:
         """Recipes with odd characters in group name are sanitized and retrievable."""
         # Use a group name with special characters
         recipe_input = Recipe(
@@ -286,22 +288,22 @@ class TestRecipeStoreBasics:
 class TestRecipeStoreEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_get_nonexistent_returns_none(self, recipe_store):
+    def test_get_nonexistent_returns_none(self, recipe_store) -> None:
         """get() on a nonexistent id returns None."""
         result = recipe_store.get(99999)
         assert result is None
 
-    def test_update_nonexistent_returns_none(self, recipe_store):
+    def test_update_nonexistent_returns_none(self, recipe_store) -> None:
         """update() on a nonexistent id returns None."""
         result = recipe_store.update(99999, {"name": "new"})
         assert result is None
 
-    def test_empty_list_is_empty(self, recipe_store):
+    def test_empty_list_is_empty(self, recipe_store) -> None:
         """list() on empty store returns empty list."""
         recipes = recipe_store.list()
         assert recipes == []
 
-    def test_recipe_preserves_all_fields(self, recipe_store):
+    def test_recipe_preserves_all_fields(self, recipe_store) -> None:
         """Saved recipe preserves all provided fields."""
         recipe_input = Recipe(
             name="Complex Recipe",

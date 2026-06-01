@@ -8,13 +8,16 @@ Three NiceGUI 3.x builders:
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from nicegui import ui
 
 from app.ui.common import group_color, title_case
 from app.models import Recipe
 from app.services.recipe_store import RecipeStore
+
+if TYPE_CHECKING:
+    from app.services.epicure_service import EpicureService, WhyResult
 
 # Model explanations (mirrors prototype MODEL_BLURB)
 MODEL_BLURB: dict[str, str] = {
@@ -43,8 +46,8 @@ def _dot(group: str, size: int = 9) -> None:
 
 
 def build_why_panel(
-    container,
-    svc,
+    container: ui.element,
+    svc: EpicureService,
     model_key: str,
     name: str | None,
     in_play: list[str],
@@ -58,9 +61,9 @@ def build_why_panel(
             )
             return
 
-        data = svc.why(model_key, name, in_play)
-        bridges: list[str] = data.get("bridges", [])
-        shared_modes: list[dict] = data.get("shared_modes", [])
+        data: WhyResult = svc.why(model_key, name, in_play)
+        bridges: list[str] = data["bridges"]
+        shared_modes = data["shared_modes"]
 
         # Header: color dot + "Why {Title}?"
         with ui.row().style(
@@ -121,13 +124,13 @@ def build_why_panel(
 
 
 def build_compare(
-    container,
-    svc,
+    container: ui.element,
+    svc: EpicureService,
     fan_models: list[str],
-    results_by_model: dict[str, list],
+    results_by_model: dict[str, list[tuple[str, float]]],
     in_play: list[str],
-    on_add: Callable,
-    on_hover: Callable,
+    on_add: Callable[[str], None],
+    on_hover: Callable[[str | None], None],
 ) -> None:
     """Populate *container* with a CSS grid: one column per model."""
     container.clear()
@@ -174,12 +177,12 @@ def build_compare(
 
 
 def build_recipe_drawer(
-    svc,
+    svc: EpicureService,
     store: RecipeStore,
-    get_state: Callable[[], dict],
+    get_state: Callable[[], dict[str, Any]],
     on_load: Callable[[Recipe], None],
     refresh_after_change: Callable[[], None],
-) -> dict:
+) -> dict[str, Any]:
     """Build a slide-over drawer.
 
     Returns {"open": callable, "refresh": callable}.
@@ -197,8 +200,8 @@ def build_recipe_drawer(
     }
 
     # ---- root elements (created once) ----
-    scrim_el: list[Any] = [None]
-    panel_el: list[Any] = [None]
+    scrim_el: list[ui.element | None] = [None]
+    panel_el: list[ui.element | None] = [None]
 
     def _do_open() -> None:
         _open[0] = True
@@ -386,7 +389,8 @@ def build_recipe_drawer(
                         notes=_form["notes"].strip(),
                     )
                     if editing_recipe and not as_new:
-                        store.update(editing_recipe.id, payload)
+                        if editing_recipe.id is not None:
+                            store.update(editing_recipe.id, payload)
                     else:
                         store.save(payload)
                     _form.update(
@@ -611,9 +615,10 @@ def build_recipe_drawer(
                 f"opacity:{'1' if is_visible else '0'};"
                 f"pointer-events:{'auto' if is_visible else 'none'};"
             )
-            panel_el[0].style(
-                f"transform:{'translateX(0)' if is_visible else 'translateX(20px)'};"
-            )
+            if panel_el[0] is not None:
+                panel_el[0].style(
+                    f"transform:{'translateX(0)' if is_visible else 'translateX(20px)'};"
+                )
         _drawer_content.refresh()
 
     # ---- Build the DOM structure once at call-time ----

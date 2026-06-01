@@ -6,9 +6,25 @@ No NiceGUI imports here — plain data in, plain data out.
 from __future__ import annotations
 
 import math
+from typing import TypedDict
 
 import numpy as np
 from app.vendor.epicure import Epicure
+
+
+class WhyMode(TypedDict):
+    """A single shared signal entry from why()."""
+
+    kind: str
+    label: str
+
+
+class WhyResult(TypedDict):
+    """Return type for EpicureService.why()."""
+
+    bridges: list[str]
+    shared_modes: list[WhyMode]
+
 
 _REPOS = {
     "cooc": "Kaikaku/epicure-cooc",
@@ -55,17 +71,19 @@ class EpicureService:
             hits = m.closest_mode(name, kind="binary", k=1)
             group = "other"
             if hits:
-                mode_id = hits[0][0]          # e.g. "fg_Vegetable/M2"
+                mode_id = hits[0][0]  # e.g. "fg_Vegetable/M2"
                 prefix = mode_id.split("/")[0]  # e.g. "fg_Vegetable"
                 if prefix.startswith("fg_"):
-                    segment = prefix[3:]       # e.g. "Vegetable"
+                    segment = prefix[3:]  # e.g. "Vegetable"
                     group = _FG_PREFIX_TO_GROUP.get(segment, "other")
             result[name] = group
         return result
 
     def _model(self, key: str) -> Epicure:
         if key not in self._models:
-            raise KeyError(f"Unknown model key '{key}'. Choose from: {list(self._models)}")
+            raise KeyError(
+                f"Unknown model key '{key}'. Choose from: {list(self._models)}"
+            )
         return self._models[key]
 
     # --- vocabulary ---
@@ -76,13 +94,17 @@ class EpicureService:
 
     # --- single-ingredient neighbors ---
 
-    def neighbors(self, model_key: str, name: str, k: int = 15) -> list[tuple[str, float]]:
+    def neighbors(
+        self, model_key: str, name: str, k: int = 15
+    ) -> list[tuple[str, float]]:
         """Top-k nearest neighbors for a single ingredient under the given model."""
         return self._model(model_key).neighbors(name, k=k, exclude_self=True)
 
     # --- multi-ingredient centroid pairings ---
 
-    def pairings(self, model_key: str, names: list[str], k: int = 15) -> list[tuple[str, float]]:
+    def pairings(
+        self, model_key: str, names: list[str], k: int = 15
+    ) -> list[tuple[str, float]]:
         """
         'Leftovers' centroid query: mean of unit vectors for each input ingredient,
         re-normalized, then cosine similarities against the full embedding matrix.
@@ -106,8 +128,10 @@ class EpicureService:
 
     def compare(self, name: str, k: int = 15) -> dict[str, list[tuple[str, float]]]:
         """Neighbors for the same ingredient across all three models."""
-        return {key: self._model(key).neighbors(name, k=k, exclude_self=True)
-                for key in _REPOS}
+        return {
+            key: self._model(key).neighbors(name, k=k, exclude_self=True)
+            for key in _REPOS
+        }
 
     # --- cuisine poles ---
 
@@ -147,8 +171,8 @@ class EpicureService:
         if not query:
             return []
         q = query.lower()
-        q_us = q.replace(" ", "_")   # spaces -> underscores for matching
-        q_sp = q.replace("_", " ")   # underscores -> spaces for matching
+        q_us = q.replace(" ", "_")  # spaces -> underscores for matching
+        q_sp = q.replace("_", " ")  # underscores -> spaces for matching
 
         starts: list[str] = []
         contains: list[str] = []
@@ -236,7 +260,7 @@ class EpicureService:
         model_key: str,
         name: str,
         names: list[str],
-    ) -> dict:
+    ) -> WhyResult:
         """Ground a 'why does this pair' explanation in real model signals.
 
         Returns:
@@ -246,19 +270,18 @@ class EpicureService:
             }
         """
         if not names:
-            return {"bridges": [], "shared_modes": []}
+            return WhyResult(bridges=[], shared_modes=[])
 
         key = model_key if model_key in self._models else "core"
         m = self._model(key)
 
         # Bridges: in-play ingredients ranked by cosine sim to `name`
         v_name = m.vec(name, normalised=True)
-        bridge_sims = [
-            (n, float(m.vec(n, normalised=True) @ v_name))
-            for n in names
+        bridge_sims: list[tuple[str, float]] = [
+            (n, float(m.vec(n, normalised=True) @ v_name)) for n in names
         ]
         bridge_sims.sort(key=lambda x: -x[1])
-        bridges = [n for n, _ in bridge_sims[:3]]
+        bridges: list[str] = [n for n, _ in bridge_sims[:3]]
 
         # Shared modes: intersect top-8 modes of `name` with top-8 modes of centroid
         name_modes = m.closest_mode(name, k=8)
@@ -275,20 +298,20 @@ class EpicureService:
         centroid_top_ids = {mid for mid, _, _ in centroid_scored[:8]}
 
         # Intersect
-        shared: list[dict] = []
+        shared: list[WhyMode] = []
         # Build a kind lookup for modes that appear in name's top modes
-        mode_kind_map = {mo.mode_id: mo.kind for mo in m.modes}
+        mode_kind_map: dict[str, str] = {mo.mode_id: mo.kind for mo in m.modes}
         # Prefer preferred kinds, then others
-        preferred_shared = []
-        other_shared = []
+        preferred_shared: list[WhyMode] = []
+        other_shared: list[WhyMode] = []
         for mid, lbl, _ in name_modes:
             if mid in centroid_top_ids:
                 kind = mode_kind_map.get(mid, "")
-                entry = {"kind": kind, "label": lbl}
+                entry = WhyMode(kind=kind, label=lbl)
                 if kind in _WHY_PREFERRED_KINDS:
                     preferred_shared.append(entry)
                 else:
                     other_shared.append(entry)
         shared = (preferred_shared + other_shared)[:5]
 
-        return {"bridges": bridges, "shared_modes": shared}
+        return WhyResult(bridges=bridges, shared_modes=shared)

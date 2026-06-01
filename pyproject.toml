@@ -14,6 +14,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.1.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
 ]
@@ -22,3 +23,8 @@ dev = [
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
+
+[tool.mypy]
+files = ["app", "tests"]
+ignore_missing_imports = true
+check_untyped_defs = true

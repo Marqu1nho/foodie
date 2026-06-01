@@ -3,7 +3,9 @@ Mise visual theme for NiceGUI — extracted from Epicure Lab design prototype.
 Warm direction: paper & spice palette with warm oklch hues.
 """
 
-MISE_HEAD_HTML = '''<link rel="preconnect" href="https://fonts.googleapis.com" />
+from __future__ import annotations
+
+MISE_HEAD_HTML: str = """<link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,600;6..72,700&display=swap" rel="stylesheet" />
 <style>
@@ -34,4 +36,4 @@ html, body {
   font-family: var(--sans);
   margin: 0;
 }
-</style>'''
+</style>"""

@@ -2,9 +2,9 @@
 Behavior-focused tests for EpicureService.
 Uses the session-scoped `epicure_service` fixture from conftest.py.
 """
+
 from __future__ import annotations
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -12,22 +12,26 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_search_prefix_first(epicure_service):
+def test_search_prefix_first(epicure_service) -> None:
     results = epicure_service.search("sesame", limit=8)
     assert len(results) <= 8
     # All returned names must contain 'sesame'
     for name in results:
         assert "sesame" in name.lower()
     # Prefix matches (name starts with 'sesame') must come before substring-only matches
-    prefix_indices = [i for i, n in enumerate(results) if n.lower().startswith("sesame")]
-    substring_indices = [i for i, n in enumerate(results) if not n.lower().startswith("sesame")]
+    prefix_indices = [
+        i for i, n in enumerate(results) if n.lower().startswith("sesame")
+    ]
+    substring_indices = [
+        i for i, n in enumerate(results) if not n.lower().startswith("sesame")
+    ]
     if prefix_indices and substring_indices:
         assert max(prefix_indices) < min(substring_indices), (
             "Prefix matches must all appear before substring-only matches"
         )
 
 
-def test_search_space_underscore(epicure_service):
+def test_search_space_underscore(epicure_service) -> None:
     results = epicure_service.search("sesame o", limit=8)
     names_lower = [n.lower() for n in results]
     assert "sesame_oil" in names_lower, (
@@ -35,18 +39,18 @@ def test_search_space_underscore(epicure_service):
     )
 
 
-def test_search_empty(epicure_service):
+def test_search_empty(epicure_service) -> None:
     assert epicure_service.search("") == []
     assert epicure_service.search("   ") == []
 
 
-def test_resolve_exact_and_spaces(epicure_service):
+def test_resolve_exact_and_spaces(epicure_service) -> None:
     assert epicure_service.resolve("sesame_oil") == "sesame_oil"
     # Case + space->underscore normalisation
     assert epicure_service.resolve("Sesame Oil") == "sesame_oil"
 
 
-def test_resolve_fuzzy_and_miss(epicure_service):
+def test_resolve_fuzzy_and_miss(epicure_service) -> None:
     # A partial prefix for a real ingredient should resolve to something in vocab
     result = epicure_service.resolve("sesame")
     vocab = epicure_service.vocab()
@@ -62,7 +66,7 @@ def test_resolve_fuzzy_and_miss(epicure_service):
 # ---------------------------------------------------------------------------
 
 
-def test_group_of_known(epicure_service):
+def test_group_of_known(epicure_service) -> None:
     all_groups = epicure_service.groups()
     assert isinstance(all_groups, list)
     assert len(all_groups) > 0
@@ -83,7 +87,7 @@ def test_group_of_known(epicure_service):
 # ---------------------------------------------------------------------------
 
 
-def test_neighbors_shape(epicure_service):
+def test_neighbors_shape(epicure_service) -> None:
     results = epicure_service.neighbors("cooc", "garlic", 5)
     assert len(results) == 5
     names = [n for n, _ in results]
@@ -92,22 +96,28 @@ def test_neighbors_shape(epicure_service):
     assert "garlic" not in names
     # Scores must be non-increasing
     for i in range(len(scores) - 1):
-        assert scores[i] >= scores[i + 1] - 1e-9, "Scores must be in non-increasing order"
+        assert scores[i] >= scores[i + 1] - 1e-9, (
+            "Scores must be in non-increasing order"
+        )
 
 
-def test_pairings_excludes_inputs(epicure_service):
+def test_pairings_excludes_inputs(epicure_service) -> None:
     inputs = ["apple", "cinnamon"]
     results = epicure_service.pairings("core", inputs, 10)
     assert len(results) <= 10
     names = [n for n, _ in results]
     for inp in inputs:
-        assert inp not in names, f"Input ingredient '{inp}' should be excluded from pairings"
+        assert inp not in names, (
+            f"Input ingredient '{inp}' should be excluded from pairings"
+        )
     scores = [s for _, s in results]
     for i in range(len(scores) - 1):
-        assert scores[i] >= scores[i + 1] - 1e-9, "Scores must be in non-increasing order"
+        assert scores[i] >= scores[i + 1] - 1e-9, (
+            "Scores must be in non-increasing order"
+        )
 
 
-def test_pairings_pushed_theta0_matches_pairings(epicure_service):
+def test_pairings_pushed_theta0_matches_pairings(epicure_service) -> None:
     """theta_deg=0 means no rotation; result should match plain pairings()."""
     names = ["honey", "orange"]
     cuisine = epicure_service.cuisines("core")[0]
@@ -123,7 +133,7 @@ def test_pairings_pushed_theta0_matches_pairings(epicure_service):
     )
 
 
-def test_pairings_pushed_changes_with_theta(epicure_service):
+def test_pairings_pushed_changes_with_theta(epicure_service) -> None:
     """A large rotation should change the result list."""
     names = ["honey", "orange"]
     cuisine = epicure_service.cuisines("core")[0]
@@ -139,7 +149,7 @@ def test_pairings_pushed_changes_with_theta(epicure_service):
     )
 
 
-def test_pairings_pushed_missing_pole_fallback(epicure_service):
+def test_pairings_pushed_missing_pole_fallback(epicure_service) -> None:
     """Unknown cuisine_key must not raise and must equal plain pairings()."""
     names = ["honey", "orange"]
     fake_cuisine = "cuisine:NotARealPole"
@@ -158,7 +168,7 @@ def test_pairings_pushed_missing_pole_fallback(epicure_service):
 # ---------------------------------------------------------------------------
 
 
-def test_compare_keys(epicure_service):
+def test_compare_keys(epicure_service) -> None:
     result = epicure_service.compare("basil", 5)
     assert set(result.keys()) == {"cooc", "core", "chem"}
     for key, lst in result.items():
@@ -171,7 +181,7 @@ def test_compare_keys(epicure_service):
             assert isinstance(item[1], float)
 
 
-def test_cuisines_per_model(epicure_service):
+def test_cuisines_per_model(epicure_service) -> None:
     for model_key in ("core", "cooc", "chem"):
         result = epicure_service.cuisines(model_key)
         assert isinstance(result, list), f"cuisines('{model_key}') should return a list"
@@ -182,7 +192,7 @@ def test_cuisines_per_model(epicure_service):
             )
 
 
-def test_why_structure(epicure_service):
+def test_why_structure(epicure_service) -> None:
     result = epicure_service.why("core", "cinnamon", ["honey", "orange"])
     assert "bridges" in result
     assert "shared_modes" in result

@@ -9,19 +9,23 @@ Exposes three builder functions:
 from __future__ import annotations
 
 import re
-from typing import Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from nicegui import ui
 
 from app.ui.common import group_color, title_case
+
+if TYPE_CHECKING:
+    from app.services.epicure_service import EpicureService
 
 
 # ---------------------------------------------------------------------------
 # 1. ChipInput
 # ---------------------------------------------------------------------------
 
+
 def build_chip_input(
-    svc,
+    svc: EpicureService,
     get_in_play: Callable[[], list[str]],
     on_add: Callable[[str], None],
     on_remove: Callable[[str], None],
@@ -54,11 +58,11 @@ def build_chip_input(
     """
 
     # --- mutable local state (not NiceGUI reactive; updated in callbacks) ---
-    state = {
-        "hi": 0,          # highlighted suggestion index
-        "open": False,    # dropdown visible
+    state: dict[str, Any] = {
+        "hi": 0,  # highlighted suggestion index
+        "open": False,  # dropdown visible
     }
-    input_ref: list[ui.input] = []   # filled once after creation
+    input_ref: list[ui.input] = []  # filled once after creation
 
     def _suggestions(q: str) -> list[str]:
         if not q.strip():
@@ -81,7 +85,6 @@ def build_chip_input(
     with ui.element("div").style(
         "position:relative; flex:1; min-width:280px;"
     ) as container:
-
         # ---- static bordered field (chips + inline input share one row) ----
         with ui.element("div").style(
             "display:flex; flex-wrap:wrap; gap:6px; align-items:center;"
@@ -110,13 +113,16 @@ def build_chip_input(
                             f" background:{color};"
                         )
                         ui.label(title_case(n))
+
                         # × remove button — capture n in closure
                         def _make_remove(name):
                             def _remove():
                                 on_remove(name)
                                 chips_area.refresh()
                                 dropdown_area.refresh()
+
                             return _remove
+
                         ui.button("×", on_click=_make_remove(n)).style(
                             "border:none; background:none; color:var(--ink-soft);"
                             " cursor:pointer; font-size:16px; line-height:1;"
@@ -126,11 +132,15 @@ def build_chip_input(
             chips_area()
 
             # ---- persistent text input (inside the field, after chips) ----
-            inp = ui.input(placeholder="type an ingredient, press Enter…").style(
-                "flex:1; min-width:140px; border:none; outline:none;"
-                " background:transparent; color:var(--ink); font-size:15px;"
-                " padding:4px 2px;"
-            ).props("borderless dense hide-bottom-space")
+            inp = (
+                ui.input(placeholder="type an ingredient, press Enter…")
+                .style(
+                    "flex:1; min-width:140px; border:none; outline:none;"
+                    " background:transparent; color:var(--ink); font-size:15px;"
+                    " padding:4px 2px;"
+                )
+                .props("borderless dense hide-bottom-space")
+            )
             input_ref.append(inp)
 
             # ---- clear-all button (after input, no auto-margin so it stays inline) ----
@@ -138,6 +148,7 @@ def build_chip_input(
             def clear_area():
                 in_play = get_in_play()
                 if len(in_play) > 1:
+
                     def _clear():
                         on_clear()
                         if input_ref:
@@ -146,6 +157,7 @@ def build_chip_input(
                         chips_area.refresh()
                         clear_area.refresh()
                         dropdown_area.refresh()
+
                     ui.button("clear", on_click=_clear).style(
                         "margin-left:4px; border:none; background:none;"
                         " color:var(--ink-soft); cursor:pointer; font-size:12px;"
@@ -155,7 +167,7 @@ def build_chip_input(
             clear_area()
 
         # watch value changes for comma/semicolon delimiter
-        def _on_value_change(e):
+        def _on_value_change(e: Any) -> None:
             val: str = e.value or ""
             # detect delimiter
             if val and val[-1] in (",", ";"):
@@ -177,7 +189,7 @@ def build_chip_input(
         inp.on_value_change(_on_value_change)
 
         # keydown: Enter, Backspace, Escape, ArrowDown, ArrowUp
-        def _on_keydown(e):
+        def _on_keydown(e: Any) -> None:
             key = (e.args or {}).get("key", "")
             q = (inp.value or "").strip()
             sugg = _suggestions(q)
@@ -224,18 +236,23 @@ def build_chip_input(
             ):
                 for i, n in enumerate(sugg):
                     color = group_color(svc.group_of(n))
-                    is_hi = (i == state["hi"])
+                    is_hi = i == state["hi"]
                     row_bg = "background:var(--hover);" if is_hi else ""
 
                     def _make_commit(name):
                         def _do():
                             commit(name)
+
                         return _do
 
-                    with ui.element("div").style(
-                        f"display:flex; align-items:center; gap:9px; padding:9px 12px;"
-                        f" cursor:pointer; font-size:14px; {row_bg}"
-                    ).on("click", _make_commit(n)):
+                    with (
+                        ui.element("div")
+                        .style(
+                            f"display:flex; align-items:center; gap:9px; padding:9px 12px;"
+                            f" cursor:pointer; font-size:14px; {row_bg}"
+                        )
+                        .on("click", _make_commit(n))
+                    ):
                         ui.element("span").style(
                             f"width:9px; height:9px; border-radius:9px;"
                             f" flex:0 0 auto; display:inline-block; background:{color};"
@@ -247,7 +264,7 @@ def build_chip_input(
 
         dropdown_area()
 
-    def refresh():
+    def refresh() -> None:
         """Re-sync the chips region after external state changes."""
         chips_area.refresh()
         clear_area.refresh()
@@ -260,17 +277,18 @@ def build_chip_input(
 # 2. PasteScratch
 # ---------------------------------------------------------------------------
 
+
 def build_paste_scratch(
-    svc,
+    svc: EpicureService,
     on_add_many: Callable[[list[str]], None],
     on_close: Callable[[], None],
 ) -> None:
     """Build the paste-a-list panel inline at the current NiceGUI context."""
 
     # mutable parsed state
-    parsed: dict = {"out": [], "miss": []}
+    parsed: dict[str, list[str]] = {"out": [], "miss": []}
 
-    def _parse(text: str):
+    def _parse(text: str) -> tuple[list[str], list[str]]:
         tokens = re.split(r"[\n,;]+", text)
         out: list[str] = []
         miss: list[str] = []
@@ -303,12 +321,16 @@ def build_paste_scratch(
             ).props("flat dense")
 
         # textarea
-        ta = ui.textarea(placeholder="e.g.\nchicken, rice, garlic\nlemon\nspinach").style(
-            "width:100%; min-height:96px; resize:vertical;"
-            " border:1px solid var(--line); border-radius:10px;"
-            " background:var(--field); color:var(--ink);"
-            " padding:10px; font-size:14px; outline:none;"
-        ).props("borderless autofocus")
+        ta = (
+            ui.textarea(placeholder="e.g.\nchicken, rice, garlic\nlemon\nspinach")
+            .style(
+                "width:100%; min-height:96px; resize:vertical;"
+                " border:1px solid var(--line); border-radius:10px;"
+                " background:var(--field); color:var(--ink);"
+                " padding:10px; font-size:14px; outline:none;"
+            )
+            .props("borderless autofocus")
+        )
 
         # footer: count, unknowns, Add button
         @ui.refreshable
@@ -319,8 +341,7 @@ def build_paste_scratch(
                 "align-items:center; gap:12px; margin-top:8px; flex-wrap:wrap;"
             ):
                 ui.label(
-                    f"{len(out)} matched"
-                    + (f" · {len(miss)} unknown" if miss else "")
+                    f"{len(out)} matched" + (f" · {len(miss)} unknown" if miss else "")
                 ).style("font-size:12px; color:var(--ink); font-weight:600;")
                 if miss:
                     preview = ", ".join(miss[:4]) + ("…" if len(miss) > 4 else "")
@@ -342,7 +363,7 @@ def build_paste_scratch(
 
         footer_area()
 
-        def _on_ta_change(e):
+        def _on_ta_change(e: Any) -> None:
             out, miss = _parse(e.value or "")
             parsed["out"] = out
             parsed["miss"] = miss
@@ -355,8 +376,9 @@ def build_paste_scratch(
 # 3. CuisineLean
 # ---------------------------------------------------------------------------
 
+
 def build_cuisine_lean(
-    svc,
+    svc: EpicureService,
     get_cuisine: Callable[[], str],
     set_cuisine: Callable[[str], None],
     get_push: Callable[[], int],
@@ -367,7 +389,7 @@ def build_cuisine_lean(
 
     def _friendly(full_key: str) -> str:
         """'cuisine:South_Asian' -> 'South Asian'"""
-        label = full_key.removeprefix("cuisine:")
+        label: str = full_key.removeprefix("cuisine:")
         return label.replace("_", " ")
 
     def _push_label(val: int) -> str:
@@ -379,7 +401,9 @@ def build_cuisine_lean(
             return "medium"
         return "bold"
 
-    cuisines = get_cuisines() if get_cuisines is not None else svc.cuisines()  # list of full keys like "cuisine:South_Asian"
+    cuisines = (
+        get_cuisines() if get_cuisines is not None else svc.cuisines()
+    )  # list of full keys like "cuisine:South_Asian"
 
     with ui.element("div").style(
         "background:var(--panel); border:1px solid var(--line); border-radius:14px;"
@@ -400,21 +424,27 @@ def build_cuisine_lean(
 
         # select
         cuisine_options = {_friendly(c): c for c in cuisines}
-        current_friendly = _friendly(get_cuisine()) if get_cuisine() else (
-            _friendly(cuisines[0]) if cuisines else ""
+        current_friendly = (
+            _friendly(get_cuisine())
+            if get_cuisine()
+            else (_friendly(cuisines[0]) if cuisines else "")
         )
 
-        sel = ui.select(
-            options=list(cuisine_options.keys()),
-            value=current_friendly,
-        ).style(
-            "width:100%; padding:9px 10px; border-radius:9px;"
-            " border:1px solid var(--line); background:var(--field);"
-            " color:var(--ink); font-size:14px;"
-        ).props("outlined dense options-dense")
+        sel = (
+            ui.select(
+                options=list(cuisine_options.keys()),
+                value=current_friendly,
+            )
+            .style(
+                "width:100%; padding:9px 10px; border-radius:9px;"
+                " border:1px solid var(--line); background:var(--field);"
+                " color:var(--ink); font-size:14px;"
+            )
+            .props("outlined dense options-dense")
+        )
 
-        def _on_select(e):
-            full_key = cuisine_options.get(e.value, "")
+        def _on_select(e: Any) -> None:
+            full_key: str = cuisine_options.get(e.value, "")
             if full_key:
                 set_cuisine(full_key)
 
@@ -428,12 +458,14 @@ def build_cuisine_lean(
                 " order:2;"
             )
 
-            slider = ui.slider(
-                min=0, max=80, step=1, value=get_push()
-            ).style("flex:1; accent-color:var(--accent); order:1;").props("dense")
+            slider = (
+                ui.slider(min=0, max=80, step=1, value=get_push())
+                .style("flex:1; accent-color:var(--accent); order:1;")
+                .props("dense")
+            )
 
-            def _on_slider(e):
-                val = int(e.value)
+            def _on_slider(e: Any) -> None:
+                val: int = int(e.value)
                 set_push(val)
                 push_label_el.set_text(_push_label(val))
 

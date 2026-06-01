@@ -19,6 +19,7 @@ warm "Mise" look.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 from nicegui import ui
 
@@ -44,14 +45,14 @@ from app.ui.components_panels import (
 svc = EpicureService()
 store = RecipeStore()
 
-MODEL_BLURB = {
+MODEL_BLURB: dict[str, str] = {
     "cooc": "what you cook it with",
     "core": "a blend of both",
     "chem": "what shares aroma compounds",
 }
-MODELS = ["cooc", "core", "chem"]
+MODELS: list[str] = ["cooc", "core", "chem"]
 
-_init_cuisines = svc.cuisines("core")
+_init_cuisines: list[str] = svc.cuisines("core")
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +73,7 @@ class AppState:
     editing_id: int | None = None
 
 
-S = AppState()
+S: AppState = AppState()
 
 
 def _fan_models() -> list[str]:
@@ -97,7 +98,7 @@ def compute(m: str) -> list[tuple[str, float]]:
 # ---------------------------------------------------------------------------
 # Static section builders (no reactive wiring — pure layout/labels).
 # ---------------------------------------------------------------------------
-def _build_header(open_drawer) -> None:
+def _build_header(open_drawer: Callable[[], None]) -> None:
     """Title block + the 'Recipes' drawer-open button."""
     with ui.element("div").style(
         "display:flex; align-items:center; gap:18px; flex-wrap:wrap;"
@@ -161,8 +162,8 @@ ui.add_head_html(MISE_HEAD_HTML, shared=True)
 @ui.page("/")
 def index() -> None:
     # forward declarations for handlers (filled below)
-    chip_refresh = {"fn": lambda: None}
-    drawer = {"open": lambda: None, "refresh": lambda: None}
+    chip_refresh: dict[str, Callable[[], None]] = {"fn": lambda: None}
+    drawer: dict[str, Any] = {"open": lambda: None, "refresh": lambda: None}
 
     # ---- handlers ----
     def add(name: str) -> None:
@@ -240,7 +241,7 @@ def index() -> None:
         canvas_view.refresh()
         top_connections.refresh()
 
-    def set_hovered(name) -> None:
+    def set_hovered(name: str | None) -> None:
         # keep cheap: only refresh the WHY panel
         S.hovered = name
         why_view.refresh()
@@ -257,7 +258,7 @@ def index() -> None:
         toolbar_view.refresh()
         drawer["refresh"]()
 
-    def get_drawer_state() -> dict:
+    def get_drawer_state() -> dict[str, Any]:
         return {
             "in_play": S.in_play,
             "model": S.model,
@@ -279,7 +280,7 @@ def index() -> None:
         _build_recipe_intro()
 
         # input bar: chip input + paste toggle + save
-        paste_open = {"v": False}
+        paste_open: dict[str, bool] = {"v": False}
 
         with ui.element("div").style(
             "display:flex; align-items:center; gap:8px; flex-wrap:wrap;"

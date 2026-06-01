@@ -13,30 +13,34 @@ Callbacks: on_add(name: str), on_hover(name_or_None).
 from __future__ import annotations
 
 import math
-from typing import Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from nicegui import ui
 
 from app.ui.common import group_color, title_case
+
+if TYPE_CHECKING:
+    from app.services.epicure_service import EpicureService
 
 # ---------------------------------------------------------------------------
 # Shared constants
 # ---------------------------------------------------------------------------
 VW, VH = 680, 560
 CX, CY = VW / 2, VH / 2
-GA = math.pi * (3 - math.sqrt(5))   # golden angle
+GA = math.pi * (3 - math.sqrt(5))  # golden angle
 
 
 # ---------------------------------------------------------------------------
 # render_list
 # ---------------------------------------------------------------------------
 
+
 def render_list(
-    container,
-    svc,
+    container: ui.element,
+    svc: EpicureService,
     results: list[tuple[str, float]],
     on_add: Callable[[str], None],
-    on_hover: Callable,
+    on_hover: Callable[[str | None], None],
     compact: bool = False,
 ) -> None:
     """Ranked rows: rank · dot · name · similarity bar · score · + button."""
@@ -50,17 +54,23 @@ def render_list(
 
         max_score = results[0][1] if results[0][1] else 1.0
 
-        with ui.column().style("display:flex; flex-direction:column; gap:2px; width:100%;"):
+        with ui.column().style(
+            "display:flex; flex-direction:column; gap:2px; width:100%;"
+        ):
             for i, (name, score) in enumerate(results):
                 group = svc.group_of(name)
                 dot_color = group_color(group)
                 bar_color = group_color(group, 60, 0.13)
                 bar_pct = (score / max_score) * 100 if max_score else 0
 
-                with ui.row().style(
-                    "display:flex; align-items:center; gap:9px; padding:7px 8px; "
-                    "border-radius:8px; cursor:pointer; width:100%; box-sizing:border-box;"
-                ).classes("suggestion-row") as row:
+                with (
+                    ui.row()
+                    .style(
+                        "display:flex; align-items:center; gap:9px; padding:7px 8px; "
+                        "border-radius:8px; cursor:pointer; width:100%; box-sizing:border-box;"
+                    )
+                    .classes("suggestion-row") as row
+                ):
                     # Hover highlight via JS events
                     row.on("mouseenter", lambda n=name: on_hover(n))
                     row.on("mouseleave", lambda: on_hover(None))
@@ -116,13 +126,14 @@ def render_list(
 # render_orbit
 # ---------------------------------------------------------------------------
 
+
 def _orbit_layout(
     results: list[tuple[str, float]],
     in_play: list[str],
-) -> tuple[dict, list[dict], list[dict]]:
+) -> tuple[dict[str, dict[str, float]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Compute anchor positions, node positions, and edges in 680x560 space."""
     n = len(in_play)
-    anchors: dict[str, dict] = {}
+    anchors: dict[str, dict[str, float]] = {}
 
     if n == 1:
         anchors[in_play[0]] = {"x": CX, "y": CY}
@@ -144,8 +155,8 @@ def _orbit_layout(
         return 1.0 if rng < 1e-6 else (s - mn) / rng
 
     inner_r, outer_r = 118, 248
-    nodes: list[dict] = []
-    edges: list[dict] = []
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
 
     for i, (name, score) in enumerate(results):
         ang = i * GA - math.pi / 2
@@ -159,22 +170,26 @@ def _orbit_layout(
         # (prototype uses EPI.why() partners; we approximate with all in_play[:2])
         for p in list(anchors.keys())[:2]:
             anc = anchors[p]
-            edges.append({
-                "x1": x, "y1": y,
-                "x2": anc["x"], "y2": anc["y"],
-                "from": name,
-            })
+            edges.append(
+                {
+                    "x1": x,
+                    "y1": y,
+                    "x2": anc["x"],
+                    "y2": anc["y"],
+                    "from": name,
+                }
+            )
 
     return anchors, nodes, edges
 
 
 def render_orbit(
-    container,
-    svc,
+    container: ui.element,
+    svc: EpicureService,
     results: list[tuple[str, float]],
     in_play: list[str],
     on_add: Callable[[str], None],
-    on_hover: Callable,
+    on_hover: Callable[[str | None], None],
 ) -> None:
     """Phyllotaxis orbit of suggestion nodes with in-play anchors and edge SVG underlay."""
     container.clear()
@@ -206,7 +221,6 @@ def render_orbit(
             "position:relative; width:100%; aspect-ratio:680/560; min-height:520px; "
             "overflow:hidden;"
         ) as orbit_container:
-
             # --- SVG edge underlay ---
             if edges:
                 edge_lines = "".join(
@@ -220,8 +234,8 @@ def render_orbit(
                     f'preserveAspectRatio="xMidYMid meet" '
                     f'style="position:absolute;inset:0;width:100%;height:100%;'
                     f'pointer-events:none;display:block;">'
-                    f'{edge_lines}'
-                    f'</svg>'
+                    f"{edge_lines}"
+                    f"</svg>"
                 )
 
             # --- Suggestion nodes ---
@@ -242,17 +256,23 @@ def render_orbit(
                 top_pct = nd["y"] / VH * 100
 
                 # Node wrapper — absolutely positioned, centered on (x,y)
-                with ui.element("div").style(
-                    f"position:absolute; "
-                    f"left:{left_pct:.3f}%; top:{top_pct:.3f}%; "
-                    f"transform:translate(-50%, -50%); "
-                    f"display:flex; flex-direction:column; align-items:center; "
-                    f"cursor:pointer; user-select:none; z-index:2;"
-                ).classes("orbit-node") as node_el:
+                with (
+                    ui.element("div")
+                    .style(
+                        f"position:absolute; "
+                        f"left:{left_pct:.3f}%; top:{top_pct:.3f}%; "
+                        f"transform:translate(-50%, -50%); "
+                        f"display:flex; flex-direction:column; align-items:center; "
+                        f"cursor:pointer; user-select:none; z-index:2;"
+                    )
+                    .classes("orbit-node") as node_el
+                ):
                     node_el.on("click", lambda n=name: on_add(n))
                     node_el.on("mouseenter", lambda n=name: on_hover(n))
                     node_el.on("mouseleave", lambda: on_hover(None))
-                    node_el._props["title"] = f"Click to add {title_case(name)} to your recipe"
+                    node_el._props["title"] = (
+                        f"Click to add {title_case(name)} to your recipe"
+                    )
 
                     # Disc + inner dot via SVG for crisp circles and hover ring
                     disc_size = int((r + 4 + 4) * 2 + 4)  # viewport px for the svg
@@ -264,15 +284,15 @@ def render_orbit(
                         f'style="overflow:visible; display:block;" '
                         f'class="orbit-disc" data-name="{name}">'
                         # hover ring (hidden by default, shown via CSS/JS)
-                        f'<circle class="hover-ring" cx="{cx_s}" cy="{cy_s}" r="{r+7}" '
+                        f'<circle class="hover-ring" cx="{cx_s}" cy="{cy_s}" r="{r + 7}" '
                         f'fill="none" stroke="var(--anchor-ring)" stroke-width="2" opacity="0" />'
                         # outer fill
                         f'<circle cx="{cx_s}" cy="{cy_s}" r="{r}" '
                         f'fill="{fill_color}" stroke="{stroke_color}" stroke-width="1.6" />'
                         # inner dot
-                        f'<circle cx="{cx_s}" cy="{cy_s}" r="{max(2.5, r*0.42):.1f}" '
+                        f'<circle cx="{cx_s}" cy="{cy_s}" r="{max(2.5, r * 0.42):.1f}" '
                         f'fill="{dot_color}" />'
-                        f'</svg>'
+                        f"</svg>"
                     )
                     ui.html(disc_svg)
 
@@ -286,19 +306,27 @@ def render_orbit(
 
                     # Score label + "+" affordance (revealed on hover via separate
                     # elements; NiceGUI lacks hover pseudo-state so we use JS toggle)
-                    score_lbl = ui.label(f"{score:.2f}").style(
-                        "font-size:10px; font-family:var(--mono); color:var(--ink-soft); "
-                        "display:none; text-align:center; pointer-events:none;"
-                    ).classes("orbit-score")
+                    score_lbl = (
+                        ui.label(f"{score:.2f}")
+                        .style(
+                            "font-size:10px; font-family:var(--mono); color:var(--ink-soft); "
+                            "display:none; text-align:center; pointer-events:none;"
+                        )
+                        .classes("orbit-score")
+                    )
 
-                    add_badge = ui.button("+").style(
-                        "position:absolute; top:-8px; right:-8px; "
-                        "width:18px; height:18px; border-radius:50%; padding:0; "
-                        "background:var(--accent); color:var(--accent-ink); "
-                        "font-size:13px; font-weight:700; line-height:1; "
-                        "display:none; border:none; cursor:pointer; "
-                        "place-items:center; z-index:3;"
-                    ).classes("orbit-add-badge")
+                    add_badge = (
+                        ui.button("+")
+                        .style(
+                            "position:absolute; top:-8px; right:-8px; "
+                            "width:18px; height:18px; border-radius:50%; padding:0; "
+                            "background:var(--accent); color:var(--accent-ink); "
+                            "font-size:13px; font-weight:700; line-height:1; "
+                            "display:none; border:none; cursor:pointer; "
+                            "place-items:center; z-index:3;"
+                        )
+                        .classes("orbit-add-badge")
+                    )
                     add_badge.on("click.stop", lambda n=name: on_add(n))
 
                 # JS to toggle hover state: show score + ring + add badge
@@ -332,7 +360,7 @@ def render_orbit(
                         f'fill="{afill}" stroke="var(--anchor-ring)" stroke-width="3" />'
                         f'<circle cx="26" cy="26" r="20" '
                         f'fill="none" stroke="{astroke}" stroke-width="1.5" opacity="0.5" />'
-                        f'</svg>'
+                        f"</svg>"
                     )
                     ui.html(anchor_svg)
                     ui.label(title_case(aname)).style(
